@@ -1,7 +1,5 @@
 ﻿using System.Text;
 
-using Microsoft.IdentityModel.Tokens;
-
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -10,196 +8,195 @@ using STMigration.Models;
 namespace STMigration.Utils;
 
 public class Messages {
-	static IDictionary<string, ComplexMessage> ParentThreads = new Dictionary<string, ComplexMessage>();
+    static IDictionary<string, ComplexMessage> ParentThreads = new Dictionary<string, ComplexMessage>();
 
-	public static List<ComplexMessage> ScanMessagesByChannel(string basePath, string channelName, List<SimpleUser> slackUsers) {
-		var messageList = new List<ComplexMessage>();
-		messageList.Clear();
-		
-		Console.WriteLine();
+    public static List<ComplexMessage> ScanMessagesByChannel(string basePath, string channelName, List<SimpleUser> slackUsers) {
+        var messageList = new List<ComplexMessage>();
+        messageList.Clear();
 
-		foreach (var file in Directory.GetFiles(Path.Combine(basePath, channelName))) {
-			Console.WriteLine($"File {file}");
+        Console.WriteLine();
 
-			using (FileStream fs = new(file, FileMode.Open, FileAccess.Read))
-			using (StreamReader sr = new(fs))
-			using (JsonTextReader reader = new(sr)) {
-				while (reader.Read()) {
-					if (reader.TokenType == JsonToken.StartObject) {
-						JObject obj = JObject.Load(reader);
+        foreach (var file in Directory.GetFiles(Path.Combine(basePath, channelName))) {
+            Console.WriteLine($"File {file}");
 
-						string messageSender = FindMessageSender(obj, slackUsers);
-						string? messageTS = obj.SelectToken("ts")?.ToString();
-						string messageText = GetFormattedText(obj, slackUsers);
+            using FileStream fs = new(file, FileMode.Open, FileAccess.Read);
+            using StreamReader sr = new(fs);
+            using JsonTextReader reader = new(sr);
 
-						List<SimpleAttachment> attachments = GetFormattedAttachments(obj);
+            while (reader.Read()) {
+                if (reader.TokenType == JsonToken.StartObject) {
+                    JObject obj = JObject.Load(reader);
 
-						string? threadTS = obj.SelectToken("thread_ts")?.ToString();
-						bool isParentThread = false;
-						bool isInThread = false;
+                    string messageSender = FindMessageSender(obj, slackUsers);
+                    string? messageTS = obj.SelectToken("ts")?.ToString();
+                    string messageText = GetFormattedText(obj, slackUsers);
 
-						SimpleMessage simpleMessage = new(messageSender, messageTS ?? "INVALID", messageText, attachments);
-						ComplexMessage complexMessage;
+                    List<SimpleAttachment> attachments = GetFormattedAttachments(obj);
 
-						if (string.IsNullOrEmpty(threadTS)) {
-							complexMessage = new(simpleMessage, false);
+                    string? threadTS = obj.SelectToken("thread_ts")?.ToString();
+                    bool isParentThread = false;
+                    bool isInThread = false;
 
-							messageList.Add(complexMessage);
-							continue;
-						}
+                    SimpleMessage simpleMessage = new(messageSender, messageTS ?? "INVALID", messageText, attachments);
+                    ComplexMessage complexMessage;
 
-						if(threadTS.Equals(messageTS)) {
-							isParentThread = true;
-						} else {
-							isInThread = true;
-						}
+                    if (string.IsNullOrEmpty(threadTS)) {
+                        complexMessage = new(simpleMessage, false);
 
-						if(isParentThread) {
-							complexMessage = new(simpleMessage, isParentThread);
-							ParentThreads.Add(threadTS, complexMessage);
-							messageList.Add(complexMessage);
-						}
+                        messageList.Add(complexMessage);
+                        continue;
+                    }
 
-						if (isInThread) {
-							if (ParentThreads.TryGetValue(threadTS, out var parentMessage)) {
-								parentMessage.ThreadMessages?.Add(simpleMessage);
-							} else {
-								Console.WriteLine($"Could not find parent thread with TS: {threadTS}");
-							}
-						}						
-					}
-				}
-			}
-		}
+                    if (threadTS.Equals(messageTS)) {
+                        isParentThread = true;
+                    } else {
+                        isInThread = true;
+                    }
 
-		return messageList;
-	}
+                    if (isParentThread) {
+                        complexMessage = new(simpleMessage, isParentThread);
+                        ParentThreads.Add(threadTS, complexMessage);
+                        messageList.Add(complexMessage);
+                    }
 
-	static string GetFormattedText (JObject obj, List<SimpleUser> slackUserList) {
-		var richTextArray = obj.SelectTokens("blocks[0].elements[0].elements[*]").ToList();
+                    if (isInThread) {
+                        if (ParentThreads.TryGetValue(threadTS, out var parentMessage)) {
+                            parentMessage.ThreadMessages?.Add(simpleMessage);
+                        } else {
+                            Console.WriteLine($"Could not find parent thread with TS: {threadTS}");
+                        }
+                    }
+                }
+            }
+        }
 
-		// Simple text, get it directly from text field
-		if (richTextArray == null || !richTextArray.Any()) {
-			string? text = obj.SelectToken("text")?.ToString();
-			return text ?? "NO TEXT";
-			
-		}
+        return messageList;
+    }
 
-		StringBuilder formattedText = new();
-		foreach (JToken token in richTextArray) {
-			string? type = token.SelectToken("type")?.ToString();
-			//Console.Write($"[{type}] - ");
-			switch (type) {
-				case "text":
-					string? text = token.SelectToken("text")?.ToString();
+    static string GetFormattedText(JObject obj, List<SimpleUser> slackUserList) {
+        var richTextArray = obj.SelectTokens("blocks[0].elements[0].elements[*]").ToList();
 
-					if(string.IsNullOrEmpty(text)) {
-						break;
-					}
+        // Simple text, get it directly from text field
+        if (richTextArray == null || !richTextArray.Any()) {
+            string? text = obj.SelectToken("text")?.ToString();
+            return text ?? "NO TEXT";
 
-					_ = formattedText.Append(text);
-					//Console.Write($"{text}\n");
-					break;
-				case "link":
-					string? link = token.SelectToken("url")?.ToString();
-					string? linkText = token.SelectToken("text")?.ToString();
+        }
 
-					if (string.IsNullOrEmpty(link)) {
-						break;
-					}
+        StringBuilder formattedText = new();
+        foreach (JToken token in richTextArray) {
+            string? type = token.SelectToken("type")?.ToString();
+            //Console.Write($"[{type}] - ");
+            switch (type) {
+                case "text":
+                    string? text = token.SelectToken("text")?.ToString();
 
-					if (string.IsNullOrEmpty(linkText)) {
-						_ = formattedText.Append($"<a href='{link}'>{link}</a>");
-						break;
-					}
+                    if (string.IsNullOrEmpty(text)) {
+                        break;
+                    }
 
-					_ = formattedText.Append($"<a href='{link}'>{linkText}</a>");
-					//Console.Write($"{link}\n");
-					break;
-				case "user":
-					string? userID = token.SelectToken("user_id")?.ToString();
+                    _ = formattedText.Append(text);
+                    //Console.Write($"{text}\n");
+                    break;
+                case "link":
+                    string? link = token.SelectToken("url")?.ToString();
+                    string? linkText = token.SelectToken("text")?.ToString();
 
-					if (string.IsNullOrEmpty(userID)) {
-						break;
-					}
+                    if (string.IsNullOrEmpty(link)) {
+                        break;
+                    }
 
-					string displayName = DisplayNameFromUserID(slackUserList, userID);
+                    if (string.IsNullOrEmpty(linkText)) {
+                        _ = formattedText.Append($"<a href='{link}'>{link}</a>");
+                        break;
+                    }
 
-					_ = formattedText.Append($"@{displayName}");
-					//Console.Write($"{user}\n");
-					break;
-				case "usergroup":
-					// TODO: Figure out user group display name
-					// In the meantime, just use a temporary placeholder
-					//string? userGroup = token.SelectToken("usergroup_id")?.ToString();
-					_ = formattedText.Append($"@TEAM");
-					//Console.Write($"{userGroup}\n");
-					break;
-				case "emoji":
-					//Console.WriteLine();
-					break;
-				default:
-					break;
-			}
-		}
+                    _ = formattedText.Append($"<a href='{link}'>{linkText}</a>");
+                    //Console.Write($"{link}\n");
+                    break;
+                case "user":
+                    string? userID = token.SelectToken("user_id")?.ToString();
 
-		return formattedText.ToString();
-	}
+                    if (string.IsNullOrEmpty(userID)) {
+                        break;
+                    }
 
-	static List<SimpleAttachment> GetFormattedAttachments(JObject obj) {
-		var attachmentsArray = obj.SelectTokens("files[*]").ToList();
+                    string displayName = DisplayNameFromUserID(slackUserList, userID);
 
-		List<SimpleAttachment> formattedAttachments = new ();
-		int index = 0;
-		foreach (var attachment in attachmentsArray) {
-			string? url = attachment.SelectToken("url_private_download")?.ToString();
-			string? fileType = attachment.SelectToken("filetype")?.ToString();
-			string? title = attachment.SelectToken("title")?.ToString();
-			string? date = attachment.SelectToken("timestamp")?.ToString();
+                    _ = formattedText.Append($"@{displayName}");
+                    //Console.Write($"{user}\n");
+                    break;
+                case "usergroup":
+                    // TODO: Figure out user group display name
+                    // In the meantime, just use a temporary placeholder
+                    //string? userGroup = token.SelectToken("usergroup_id")?.ToString();
+                    _ = formattedText.Append($"@TEAM");
+                    //Console.Write($"{userGroup}\n");
+                    break;
+                case "emoji":
+                    //Console.WriteLine();
+                    break;
+                default:
+                    break;
+            }
+        }
 
-			if (string.IsNullOrEmpty(url)) {
-				continue;
-			}
-			if (string.IsNullOrEmpty(fileType) && string.IsNullOrEmpty(title)) {
-				continue;
-			}
+        return formattedText.ToString();
+    }
 
-			formattedAttachments.Add(new SimpleAttachment(url, fileType, title, date));
-			index++;
-		}
+    static List<SimpleAttachment> GetFormattedAttachments(JObject obj) {
+        var attachmentsArray = obj.SelectTokens("files[*]").ToList();
 
+        List<SimpleAttachment> formattedAttachments = new();
+        int index = 0;
+        foreach (var attachment in attachmentsArray) {
+            string? url = attachment.SelectToken("url_private_download")?.ToString();
+            string? fileType = attachment.SelectToken("filetype")?.ToString();
+            string? title = attachment.SelectToken("title")?.ToString();
+            string? date = attachment.SelectToken("timestamp")?.ToString();
 
-		return formattedAttachments;
-	}
+            if (string.IsNullOrEmpty(url)) {
+                continue;
+            }
+            if (string.IsNullOrEmpty(fileType) && string.IsNullOrEmpty(title)) {
+                continue;
+            }
 
-	static string DisplayNameFromUserID (List<SimpleUser> slackUserList, string userID) {
-		if (userID != "USLACKBOT") {
-			var simpleUser = slackUserList.FirstOrDefault(w => w.UserId == userID);
-			if (simpleUser != null) {
-				return simpleUser.DisplayName;
-			}
-		}
+            formattedAttachments.Add(new SimpleAttachment(url, fileType, title, date));
+            index++;
+        }
 
-		return "SlackBot";
-	}
+        return formattedAttachments;
+    }
 
-	static string FindMessageSender (JObject obj, List<SimpleUser> slackUserList) {
-		var userID = obj.SelectToken("user")?.ToString();
+    static string DisplayNameFromUserID(List<SimpleUser> slackUserList, string userID) {
+        if (userID != "USLACKBOT") {
+            var simpleUser = slackUserList.FirstOrDefault(w => w.UserId == userID);
+            if (simpleUser != null) {
+                return simpleUser.DisplayName;
+            }
+        }
 
-		if (!String.IsNullOrEmpty(userID)) {
-			return DisplayNameFromUserID(slackUserList, userID);
-		}
+        return "SlackBot";
+    }
 
-		string? username = obj.SelectToken("username")?.ToString();
-		if (!(String.IsNullOrEmpty(username))) {
-			return username;
-		}
+    static string FindMessageSender(JObject obj, List<SimpleUser> slackUserList) {
+        var userID = obj.SelectToken("user")?.ToString();
 
-		string? bot_id = obj.SelectToken("bot_id")?.ToString();
-		if (!(String.IsNullOrEmpty(bot_id))) {
-			return bot_id;
-		}
+        if (!string.IsNullOrEmpty(userID)) {
+            return DisplayNameFromUserID(slackUserList, userID);
+        }
 
-		return "";
-	}
+        string? username = obj.SelectToken("username")?.ToString();
+        if (!string.IsNullOrEmpty(username)) {
+            return username;
+        }
+
+        string? bot_id = obj.SelectToken("bot_id")?.ToString();
+        if (!string.IsNullOrEmpty(bot_id)) {
+            return bot_id;
+        }
+
+        return "";
+    }
 }
