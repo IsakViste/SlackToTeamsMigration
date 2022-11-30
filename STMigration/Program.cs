@@ -25,7 +25,8 @@ class Program {
             var choice = -1;
             try {
                 choice = int.Parse(Console.ReadLine() ?? string.Empty);
-            } catch (FormatException) {
+            } catch (FormatException ex) {
+                Console.WriteLine(ex.Message);
                 Environment.Exit(0);
             }
             return choice;

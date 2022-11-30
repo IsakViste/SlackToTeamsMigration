@@ -10,9 +10,6 @@ using STMigration.Models;
 namespace STMigration;
 
 class GraphHelper {
-    // Settings object
-    private static Settings? _settings;
-
     // User auth token credential
     private static DeviceCodeCredential? _deviceCodeCredential;
     // Client configured with user authentication
@@ -35,8 +32,6 @@ class GraphHelper {
 
     public static void InitializeGraphForUserAuth(Settings settings,
         Func<DeviceCodeInfo, CancellationToken, Task> deviceCodePrompt) {
-        _settings = settings;
-
         _deviceCodeCredential = new DeviceCodeCredential(deviceCodePrompt,
             settings.AuthTenant, settings.ClientId);
 
@@ -81,13 +76,13 @@ class GraphHelper {
         }
 
         // Create a new message
-        return (new ChatMessage {
+        return new ChatMessage {
             Body = new ItemBody {
                 Content = message.FormattedMessage(),
                 ContentType = BodyType.Html,
             },
             Attachments = attachments
-        });
+        };
     }
 
     public static Task<ITeamChannelsCollectionPage> GetTeamChannelsAsync(string teamID) {

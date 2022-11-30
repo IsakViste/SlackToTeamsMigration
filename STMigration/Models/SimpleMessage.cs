@@ -4,29 +4,33 @@ namespace STMigration.Models;
 
 public class SimpleMessage {
     public string User { get; set; }
-    public string Date { get; set; }
+    public string? Date { get; set; }
     public string Text { get; set; }
     public List<SimpleAttachment> AttachedFiles { get; set; }
 
-    public SimpleMessage(string user, string date, string text, List<SimpleAttachment> attachedFiles) {
+    public SimpleMessage(string user, string? date, string text, List<SimpleAttachment> attachedFiles) {
         User = user;
-        Date = FormattedDate(date);
-        Text = FormattedText(text);
+        Date = date;
+        Text = text;
         AttachedFiles = attachedFiles;
     }
 
     public string FormattedMessage() {
-        return $"<strong>[{Date}] {User}</strong><br><blockquote>{Text}</blockquote>{FormattedAttachments()}";
+        return $"<strong>[{FormattedDate()}] {User}</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
     }
 
-    public static string FormattedText(string text) {
-        string formattedText = text.TrimEnd().Replace("\n", "<br>");
+    public string FormattedText() {
+        string formattedText = Text.TrimEnd().Replace("\n", "<br>");
 
         return formattedText;
     }
 
-    public static string FormattedDate(string date) {
-        DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(long.Parse(date.Split(".")[0])).LocalDateTime;
+    public string FormattedDate() {
+        if (string.IsNullOrEmpty(Date)) {
+            return "Unknown";
+        }
+
+        DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(long.Parse(Date.Split(".")[0])).LocalDateTime;
 
         return dateTime.ToString();
     }

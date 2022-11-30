@@ -8,7 +8,7 @@ using STMigration.Models;
 namespace STMigration.Utils;
 
 public class Messages {
-    static IDictionary<string, ComplexMessage> ParentThreads = new Dictionary<string, ComplexMessage>();
+    static readonly IDictionary<string, ComplexMessage> ParentThreads = new Dictionary<string, ComplexMessage>();
 
     public static List<ComplexMessage> ScanMessagesByChannel(string basePath, string channelName, List<SimpleUser> slackUsers) {
         var messageList = new List<ComplexMessage>();
@@ -37,7 +37,7 @@ public class Messages {
                     bool isParentThread = false;
                     bool isInThread = false;
 
-                    SimpleMessage simpleMessage = new(messageSender, messageTS ?? "INVALID", messageText, attachments);
+                    SimpleMessage simpleMessage = new(messageSender, messageTS, messageText, attachments);
                     ComplexMessage complexMessage;
 
                     if (string.IsNullOrEmpty(threadTS)) {
@@ -79,7 +79,7 @@ public class Messages {
         // Simple text, get it directly from text field
         if (richTextArray == null || !richTextArray.Any()) {
             string? text = obj.SelectToken("text")?.ToString();
-            return text ?? "NO TEXT";
+            return text ?? string.Empty;
 
         }
 
