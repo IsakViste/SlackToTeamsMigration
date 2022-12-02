@@ -2,20 +2,17 @@
 // Licensed under the MIT License.
 
 using Microsoft.Extensions.Configuration;
+using Microsoft.Graph;
 
 namespace STMigration;
 
-public class Settings {
+public class AppSettings {
     public string? ClientId { get; set; }
     public string? ClientSecret { get; set; }
     public string? TenantId { get; set; }
     public string? AuthTenant { get; set; }
 
-    public static readonly string[] SCOPES = new string[] {
-      "user.read"
-    };
-
-    public static Settings LoadSettings() {
+    public static AppSettings LoadSettings() {
         // Load settings
         IConfiguration config = new ConfigurationBuilder()
             // appsettings.json is required
@@ -26,7 +23,7 @@ public class Settings {
             .AddUserSecrets<Program>()
             .Build();
 
-        return config.GetRequiredSection("Settings").Get<Settings>();
+        return config.GetRequiredSection("Settings").Get<AppSettings>();
     }
 }
 

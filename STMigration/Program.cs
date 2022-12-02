@@ -1,6 +1,7 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
+﻿// Copyright (c) Isak Viste. All rights reserved.
 // Licensed under the MIT license.
 
+using System.Diagnostics;
 using Microsoft.Graph;
 using Microsoft.IdentityModel.Tokens;
 
@@ -13,108 +14,95 @@ namespace STMigration;
 
 class Program {
 
+    #region Main Program
     static async Task Main(string[] args) {
         Console.WriteLine("[Migration] Slack -> Teams");
 
-        List<ComplexMessage> messages = GetMessagesAsync(args);
-        await MainProgram(messages);
-    }
+        // Initialization
+        var settings = AppSettings.LoadSettings();
 
-    static async Task MainProgram(List<ComplexMessage> messages) {
-        static int ChoiceInput() {
-            var choice = -1;
-            try {
-                choice = int.Parse(Console.ReadLine() ?? string.Empty);
-            } catch (FormatException ex) {
-                Console.WriteLine(ex.Message);
-                Environment.Exit(0);
-            }
-            return choice;
-        }
-
-        var settings = Settings.LoadSettings();
-
-        // Initialize Graph
         InitializeHttpClient();
         InitializeGraph(settings);
 
-        // Greet the user by name
+        // Greet user
         await GreetUserAsync();
 
-        Console.WriteLine("Which Team would you like to migrate too?");
-        var joinedTeams = await ListJoinedTeamsAsync();
+        // Choose team to migrate too
+        string teamID = await GetTeamToMigrateToo();
 
-        var choice = ChoiceInput();
+        // Choose channel to migrate too
+        var (channelID, channelName) = await GetChannelToMigrateToo(teamID);
 
-        var teamID = joinedTeams[choice].Id;
-        Console.WriteLine($"You have chosen: {joinedTeams[choice].DisplayName}");
+        // Scan and send messages in Teams
+        await ScanAndHandleMessages(args, teamID, channelID, channelName);
 
-        Console.WriteLine($"");
+        Console.WriteLine();
+        Console.WriteLine("Slack to Teams ID dictionary:");
+        foreach ((var key, var value) in s_messageSlackToTeamsIDs) {
+            Console.WriteLine($"{key}: {value}");
+        }
+    }
+    #endregion
+
+    #region Helpers
+    static async Task<(string, string)> GetChannelToMigrateToo(string teamID) {
+        Console.WriteLine();
         Console.WriteLine($"Which Channel would you like to send a message too?");
         var channels = await ListTeamChannelsAsync(teamID);
 
-        choice = ChoiceInput();
-
-        var channelID = channels[choice].Id;
-        var channelName = channels[choice].DisplayName;
+        int choice;
+        do {
+            choice = UserInputIndexOfList();
+            if (choice < 0 || choice >= channels.Count) {
+                Console.WriteLine($"Not a valid selection, must be between 0 and {channels.Count}");
+            }
+        } while (choice < 0 || choice >= channels.Count);
+        string channelName = channels[choice].DisplayName;
         Console.WriteLine($"You have chosen: {channelName}");
 
-        foreach (ComplexMessage complexMessage in messages) {
-            SimpleMessage simpleMessage = complexMessage.Message;
-            ChatMessage? teamsMessage = await SendMessageToChannel(simpleMessage, teamID, channelID, channelName);
-
-            if (string.IsNullOrEmpty(teamsMessage?.Id)) {
-                continue;
-            }
-
-            if (complexMessage.IsThread && complexMessage.ThreadMessages?.Count > 0) {
-                foreach (SimpleMessage threadMessage in complexMessage.ThreadMessages) {
-                    _ = await SendMessageToChannel(threadMessage, teamID, channelID, channelName, teamsMessage.Id);
-                }
-            }
-        }
+        return (channels[choice].Id, channelName);
     }
 
-    static async Task<ChatMessage?> SendMessageToChannel(SimpleMessage message, string teamID, string channelID, string channelName, string threadID = "") {
-        if (!message.AttachedFiles.IsNullOrEmpty()) {
-            foreach (var attachment in message.AttachedFiles) {
-                await UploadFileToPath(teamID, channelName, attachment);
+    static async Task<string> GetTeamToMigrateToo() {
+        Console.WriteLine();
+        Console.WriteLine("Which Team would you like to migrate too?");
+        var joinedTeams = await ListJoinedTeamsAsync();
+
+        int choice;
+        do {
+            choice = UserInputIndexOfList();
+            if (choice < 0 || choice >= joinedTeams.Count) {
+                Console.WriteLine($"Not a valid selection, must be between 0 and {joinedTeams.Count}");
             }
-        }
+        } while (choice < 0 || choice >= joinedTeams.Count);
 
-        if (!string.IsNullOrEmpty(threadID)) {
-            await SendMessageToChannelThread(teamID, channelID, threadID, message);
-            return null;
-        }
+        Console.WriteLine($"You have chosen: {joinedTeams[choice].DisplayName}");
 
-        ChatMessage teamsMessage = await SendMessageToTeamChannel(teamID, channelID, message);
-        return teamsMessage;
+        return joinedTeams[choice].Id;
     }
 
-    static List<ComplexMessage> GetMessagesAsync(string[] args) {
-        List<ComplexMessage> messages = new();
+    static int UserInputIndexOfList() {
+        var choice = -1;
 
-        if (args.Length > 1) {
-            string slackArchiveBasePath = args[0];
-            string usersPath = Path.Combine(slackArchiveBasePath, "users.json");
-            string channelToMigrate = args[1];
-
-            List<SimpleUser> slackUsers = Users.ScanUsers(usersPath);
-
-            messages = Messages.ScanMessagesByChannel(slackArchiveBasePath, channelToMigrate, slackUsers);
-        } else {
-            Console.WriteLine($"Please specify path to slack export folder and name of channel to migrate");
-            Console.WriteLine($"e.g. dotnet run SlackExport General");
+        Console.Write("Select: ");
+        try {
+            choice = int.Parse(Console.ReadLine() ?? string.Empty);
+        } catch (FormatException ex) {
+            Console.WriteLine(ex.Message);
         }
-
-        return messages;
+        return choice;
     }
+    #endregion
+
+    #region Initialization
+    private static readonly Dictionary<string, string> s_messageSlackToTeamsIDs = new();
+    private static HttpClient? s_httpClient;
 
     static void InitializeHttpClient() {
-        GraphHelper.InitializeHttpClient();
+        s_httpClient = new HttpClient();
     }
 
-    static void InitializeGraph(Settings settings) {
+    static void InitializeGraph(AppSettings settings) {
         Console.WriteLine();
 
         GraphHelper.InitializeGraphForUserAuth(settings,
@@ -127,11 +115,107 @@ class Program {
                 return Task.FromResult(0);
             });
     }
+    #endregion
 
+    #region Message Handling
+    static async Task ScanAndHandleMessages(string[] args, string teamID, string channelID, string channelName) {
+        string directory = System.IO.Directory.GetCurrentDirectory();
+        string slackArchiveBasePath = GetSlackArchiveBasePath(directory, args.Length > 0 ? args[0] : string.Empty);
+        string slackChannelPath = GetSlackChannelPath(slackArchiveBasePath);
+        string slackUsersPath = GetSlackUsersPath(slackArchiveBasePath);
+
+        List<SimpleUser> slackUsers = Users.ScanUsers(slackUsersPath);
+
+        foreach (var file in Messages.GetFilesForChannel(slackChannelPath)) {
+            foreach (var message in Messages.GetMessagesForDay(file, slackUsers)) {
+                if (!message.AttachedFiles.IsNullOrEmpty()) {
+                    foreach (var attachment in message.AttachedFiles) {
+                        await UploadFileToPath(teamID, channelName, attachment);
+                    }
+                }
+
+                if (!message.IsInThread) {
+                    await SendMessageToTeamChannel(teamID, channelID, message, false);
+                } else {
+                    if (message.IsParentThread) {
+                        await SendMessageToTeamChannel(teamID, channelID, message, true);
+                    } else {
+                        await SendMessageToChannelThread(teamID, channelID, message);
+                    }
+                }
+            }
+        }
+    }
+
+    static string GetSlackArchiveBasePath(string directory, string arg) {
+        string slackArchiveBasePath = string.Empty;
+        bool isValidPath = false;
+
+        if (!string.IsNullOrEmpty(arg)) {
+            slackArchiveBasePath = Path.GetFullPath(Path.Combine(directory, @arg));
+            isValidPath = System.IO.Directory.Exists(slackArchiveBasePath);
+            if (!isValidPath) {
+                Console.WriteLine($"{slackArchiveBasePath} is not a valid path!");
+            }
+        }
+
+        while (!isValidPath) {
+            Console.WriteLine();
+            Console.Write("Relative path to local Slack Archive folder: ");
+            var userReadPath = Console.ReadLine() ?? string.Empty;
+            slackArchiveBasePath = Path.GetFullPath(Path.Combine(directory, @userReadPath));
+            isValidPath = System.IO.Directory.Exists(slackArchiveBasePath);
+            if (!isValidPath) {
+                Console.WriteLine($"{slackArchiveBasePath} is not a valid path! Try again...");
+            }
+        }
+
+        Console.WriteLine($"Successfully retrieved: {slackArchiveBasePath}");
+
+        return slackArchiveBasePath;
+    }
+
+    static string GetSlackChannelPath(string slackArchiveBasePath) {
+        string slackChannelPath;
+
+        bool isValidChannel;
+        do {
+            Console.WriteLine();
+            Console.Write("Name of Slack Channel to migrate from: ");
+            var userInput = Console.ReadLine() ?? string.Empty;
+            slackChannelPath = Path.Combine(slackArchiveBasePath, userInput);
+            isValidChannel = System.IO.Directory.Exists(slackChannelPath);
+            if (!isValidChannel) {
+                Console.WriteLine($"{slackChannelPath} is not a valid path! Try again...");
+            }
+        } while (!isValidChannel);
+
+        Console.WriteLine($"Successfully retrieved: {slackChannelPath}");
+
+        return slackChannelPath;
+    }
+
+    static string GetSlackUsersPath(string slackArchiveBasePath) {
+        string slackUsersPath = Path.Combine(slackArchiveBasePath, "users.json");
+
+        if (!System.IO.File.Exists(slackUsersPath)) {
+            Console.WriteLine($"Could not find users json: {slackUsersPath}");
+            Console.WriteLine("Exiting...");
+            Environment.Exit(1);
+        }
+
+        Console.WriteLine($"Successfully retrieved: {slackUsersPath}");
+        Console.WriteLine();
+
+        return slackUsersPath;
+    }
+    #endregion
+
+    #region Graph Callers
     static async Task GreetUserAsync() {
         try {
             var user = await GraphHelper.GetUserAsync();
-            Console.WriteLine($"");
+            Console.WriteLine();
             Console.WriteLine($"Hello, {user?.DisplayName}!");
             // For Work/school accounts, email is in Mail property
             // Personal accounts, email is in UserPrincipalName
@@ -139,26 +223,28 @@ class Program {
         } catch (Exception ex) {
             Console.WriteLine($"Error getting user: {ex.Message}");
         }
-        Console.WriteLine($"");
     }
 
-    static async Task SendMessageToChannelThread(string teamID, string channelID, string threadID, SimpleMessage message) {
+    static async Task SendMessageToChannelThread(string teamID, string channelID, STMessage message) {
         try {
-            await GraphHelper.SendMessageToChannelThreadAsync(teamID, channelID, threadID, message);
+            bool result = s_messageSlackToTeamsIDs.TryGetValue(message.ThreadDate ?? message.Date, out string? threadID);
+            if (result && !string.IsNullOrEmpty(threadID)) {
+                await GraphHelper.SendMessageToChannelThreadAsync(teamID, channelID, threadID, message);
+            }
         } catch (Exception ex) {
             Console.WriteLine($"Error sending message: {ex.Message}");
         }
-
     }
 
-    static async Task<ChatMessage> SendMessageToTeamChannel(string teamID, string channelID, SimpleMessage message) {
+    static async Task SendMessageToTeamChannel(string teamID, string channelID, STMessage message, bool isParentThread) {
         try {
-            return await GraphHelper.SendMessageToChannelAsync(teamID, channelID, message);
+            var teamsMessage = await GraphHelper.SendMessageToChannelAsync(teamID, channelID, message);
+            if (isParentThread) {
+                s_messageSlackToTeamsIDs.Add(message.ThreadDate ?? message.Date, teamsMessage.Id);
+            }
         } catch (Exception ex) {
             Console.WriteLine($"Error sending message: {ex.Message}");
         }
-
-        return new ChatMessage();
     }
 
     static async Task<ITeamChannelsCollectionPage> ListTeamChannelsAsync(string teamID) {
@@ -167,7 +253,7 @@ class Program {
 
             int index = 0;
             foreach (var channel in channels) {
-                Console.WriteLine($"[{index}] {channel.DisplayName} (({channel.Id}))");
+                Console.WriteLine($"[{index}] {channel.DisplayName} ({channel.Id})");
                 index++;
             }
             return channels;
@@ -184,7 +270,7 @@ class Program {
 
             int index = 0;
             foreach (var team in joinedTeams) {
-                Console.WriteLine($"[{index}] {team.DisplayName} (({team.Id}))");
+                Console.WriteLine($"[{index}] {team.DisplayName} ({team.Id})");
                 index++;
             }
             return joinedTeams;
@@ -196,10 +282,15 @@ class Program {
     }
 
     static async Task UploadFileToPath(string teamID, string channelName, SimpleAttachment attachment) {
+        // Ensure client isn't null
+        _ = s_httpClient ??
+            throw new NullReferenceException("HTTP Client has not been initialized");
+
         try {
-            await GraphHelper.UploadFileToTeamChannel(teamID, channelName, attachment);
+            await GraphHelper.UploadFileToTeamChannel(s_httpClient, teamID, channelName, attachment);
         } catch (Exception ex) {
             Console.WriteLine($"Error uploading file: {ex.Message}");
         }
     }
+    #endregion
 }

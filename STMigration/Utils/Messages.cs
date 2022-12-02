@@ -8,69 +8,43 @@ using STMigration.Models;
 namespace STMigration.Utils;
 
 public class Messages {
-    static readonly IDictionary<string, ComplexMessage> ParentThreads = new Dictionary<string, ComplexMessage>();
+    public static IEnumerable<string> GetFilesForChannel(string channelPath) {
+        foreach (var file in Directory.GetFiles(channelPath)) {
+            yield return file;
+        }
+    }
 
-    public static List<ComplexMessage> ScanMessagesByChannel(string basePath, string channelName, List<SimpleUser> slackUsers) {
-        var messageList = new List<ComplexMessage>();
-        messageList.Clear();
+    public static IEnumerable<STMessage> GetMessagesForDay(string messagesPath, List<SimpleUser> slackUsers) {
+        Console.WriteLine($"File {messagesPath}");
 
-        Console.WriteLine();
+        using FileStream fs = new(messagesPath, FileMode.Open, FileAccess.Read);
+        using StreamReader sr = new(fs);
+        using JsonTextReader reader = new(sr);
 
-        foreach (var file in Directory.GetFiles(Path.Combine(basePath, channelName))) {
-            Console.WriteLine($"File {file}");
+        while (reader.Read()) {
+            if (reader.TokenType == JsonToken.StartObject) {
+                JObject obj = JObject.Load(reader);
 
-            using FileStream fs = new(file, FileMode.Open, FileAccess.Read);
-            using StreamReader sr = new(fs);
-            using JsonTextReader reader = new(sr);
-
-            while (reader.Read()) {
-                if (reader.TokenType == JsonToken.StartObject) {
-                    JObject obj = JObject.Load(reader);
-
-                    string messageSender = FindMessageSender(obj, slackUsers);
-                    string? messageTS = obj.SelectToken("ts")?.ToString();
-                    string messageText = GetFormattedText(obj, slackUsers);
-
-                    List<SimpleAttachment> attachments = GetFormattedAttachments(obj);
-
-                    string? threadTS = obj.SelectToken("thread_ts")?.ToString();
-                    bool isParentThread = false;
-                    bool isInThread = false;
-
-                    SimpleMessage simpleMessage = new(messageSender, messageTS, messageText, attachments);
-                    ComplexMessage complexMessage;
-
-                    if (string.IsNullOrEmpty(threadTS)) {
-                        complexMessage = new(simpleMessage, false);
-
-                        messageList.Add(complexMessage);
-                        continue;
-                    }
-
-                    if (threadTS.Equals(messageTS)) {
-                        isParentThread = true;
-                    } else {
-                        isInThread = true;
-                    }
-
-                    if (isParentThread) {
-                        complexMessage = new(simpleMessage, isParentThread);
-                        ParentThreads.Add(threadTS, complexMessage);
-                        messageList.Add(complexMessage);
-                    }
-
-                    if (isInThread) {
-                        if (ParentThreads.TryGetValue(threadTS, out var parentMessage)) {
-                            parentMessage.ThreadMessages?.Add(simpleMessage);
-                        } else {
-                            Console.WriteLine($"Could not find parent thread with TS: {threadTS}");
-                        }
-                    }
+                string? messageTS = obj.SelectToken("ts")?.ToString();
+                if (string.IsNullOrEmpty(messageTS)) {
+                    Console.Error.WriteLine($"{messageTS} is not valid in");
+                    Console.Error.WriteLine($"{obj}");
+                    Console.WriteLine();
+                    continue;
                 }
+
+                string messageSender = FindMessageSender(obj, slackUsers);
+                string messageText = GetFormattedText(obj, slackUsers);
+
+                List<SimpleAttachment> attachments = GetFormattedAttachments(obj);
+
+                string? threadTS = obj.SelectToken("thread_ts")?.ToString();
+
+                STMessage message = new(messageSender, messageTS, threadTS, messageText, attachments);
+
+                yield return message;
             }
         }
-
-        return messageList;
     }
 
     static string GetFormattedText(JObject obj, List<SimpleUser> slackUserList) {
