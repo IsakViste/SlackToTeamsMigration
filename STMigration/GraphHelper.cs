@@ -154,7 +154,7 @@ class GraphHelper {
 
         // Create the upload session
         // itemPath does not need to be a path to an existing item
-        string pathToItem = $"/{channelName}/MigrationFiles/{attachment.Date}/{attachment.Name}";
+        string pathToItem = $"/{channelName}/{attachment.Date}/{attachment.Name}";
         var uploadSession = await s_userClient
             .Groups[teamID]
             .Drive

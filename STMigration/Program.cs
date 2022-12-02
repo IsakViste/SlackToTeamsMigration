@@ -1,10 +1,9 @@
 ﻿// Copyright (c) Isak Viste. All rights reserved.
 // Licensed under the MIT license.
 
-using System.Diagnostics;
 using Microsoft.Graph;
 using Microsoft.IdentityModel.Tokens;
-
+using Newtonsoft.Json;
 using STMigration.Models;
 using STMigration.Utils;
 
@@ -21,6 +20,7 @@ class Program {
         // Initialization
         var settings = AppSettings.LoadSettings();
 
+        InitializeIDLookUpTable();
         InitializeHttpClient();
         InitializeGraph(settings);
 
@@ -35,12 +35,6 @@ class Program {
 
         // Scan and send messages in Teams
         await ScanAndHandleMessages(args, teamID, channelID, channelName);
-
-        Console.WriteLine();
-        Console.WriteLine("Slack to Teams ID dictionary:");
-        foreach ((var key, var value) in s_messageSlackToTeamsIDs) {
-            Console.WriteLine($"{key}: {value}");
-        }
     }
     #endregion
 
@@ -95,11 +89,15 @@ class Program {
     #endregion
 
     #region Initialization
-    private static readonly Dictionary<string, string> s_messageSlackToTeamsIDs = new();
+    private static Dictionary<string, string> s_messageSlackToTeamsIDs = new();
     private static HttpClient? s_httpClient;
 
     static void InitializeHttpClient() {
         s_httpClient = new HttpClient();
+    }
+
+    static void InitializeIDLookUpTable() {
+        s_messageSlackToTeamsIDs = LoadSerializedIDs();
     }
 
     static void InitializeGraph(AppSettings settings) {
@@ -136,13 +134,15 @@ class Program {
 
                 if (!message.IsInThread) {
                     await SendMessageToTeamChannel(teamID, channelID, message, false);
-                } else {
-                    if (message.IsParentThread) {
-                        await SendMessageToTeamChannel(teamID, channelID, message, true);
-                    } else {
-                        await SendMessageToChannelThread(teamID, channelID, message);
-                    }
+                    continue;
                 }
+
+                if (message.IsParentThread) {
+                    await SendMessageToTeamChannel(teamID, channelID, message, true);
+                    continue;
+                }
+
+                await SendMessageToChannelThread(teamID, channelID, message);
             }
         }
     }
@@ -240,7 +240,9 @@ class Program {
         try {
             var teamsMessage = await GraphHelper.SendMessageToChannelAsync(teamID, channelID, message);
             if (isParentThread) {
-                s_messageSlackToTeamsIDs.Add(message.ThreadDate ?? message.Date, teamsMessage.Id);
+                if (s_messageSlackToTeamsIDs.TryAdd(message.ThreadDate ?? message.Date, teamsMessage.Id)) {
+                    SaveSerializeIDs(s_messageSlackToTeamsIDs);
+                }
             }
         } catch (Exception ex) {
             Console.WriteLine($"Error sending message: {ex.Message}");
@@ -291,6 +293,34 @@ class Program {
         } catch (Exception ex) {
             Console.WriteLine($"Error uploading file: {ex.Message}");
         }
+    }
+    #endregion
+
+    #region Slack Teams IDs
+    static readonly string s_lookupTable = "LookupTable-IDS.json";
+
+    static void SaveSerializeIDs(Dictionary<string, string> dict) {
+        using StreamWriter file = System.IO.File.CreateText(s_lookupTable);
+
+        JsonSerializer serializer = new();
+        serializer.Serialize(file, dict);
+    }
+
+    static Dictionary<string, string> LoadSerializedIDs() {
+        try {
+            using StreamReader file = System.IO.File.OpenText(s_lookupTable);
+
+            JsonSerializer serializer = new();
+            var serializedIDs = serializer.Deserialize(file, typeof(Dictionary<string, string>));
+
+            return (Dictionary<string, string>?)serializedIDs ?? new();
+        } catch (FileNotFoundException) {
+            Console.WriteLine("No existing lookup table, will create one!");
+        } catch (Exception ex) {
+            Console.WriteLine(ex);
+        }
+
+        return new();
     }
     #endregion
 }
