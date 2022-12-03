@@ -1,0 +1,7 @@
+{
+    "@microsoft.graph.teamCreationMode": "migration",
+    "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+    "displayName": "My Test Team",
+    "description": "My Test Team's Description",
+    "createdDateTime": "2020-03-14T11:22:17.067Z"
+}

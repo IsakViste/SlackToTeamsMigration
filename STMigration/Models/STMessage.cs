@@ -26,7 +26,7 @@ public class STMessage {
     }
 
     public string FormattedMessage() {
-        return $"<strong>[{FormattedDate()}] {User}</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
+        return $"<strong>{User}</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
     }
 
     public string FormattedText() {
@@ -37,10 +37,6 @@ public class STMessage {
 
     public DateTime FormattedLocalTime() {
         return DateTimeOffset.FromUnixTimeSeconds(long.Parse(Date.Split(".")[0])).LocalDateTime;
-    }
-
-    public string FormattedDate() {
-        return FormattedLocalTime().ToString();
     }
 
     public string FormattedAttachments() {
