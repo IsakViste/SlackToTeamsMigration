@@ -35,10 +35,12 @@ public class STMessage {
         return formattedText;
     }
 
-    public string FormattedDate() {
-        DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(long.Parse(Date.Split(".")[0])).LocalDateTime;
+    public DateTime FormattedLocalTime() {
+        return DateTimeOffset.FromUnixTimeSeconds(long.Parse(Date.Split(".")[0])).LocalDateTime;
+    }
 
-        return dateTime.ToString();
+    public string FormattedDate() {
+        return FormattedLocalTime().ToString();
     }
 
     public string FormattedAttachments() {

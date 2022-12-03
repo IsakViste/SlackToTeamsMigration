@@ -1,4 +1,5 @@
-﻿// Copyright (c) Isak Viste. All rights reserved.
+﻿using System;
+// Copyright (c) Isak Viste. All rights reserved.
 // Licensed under the MIT license.
 
 using Microsoft.Graph;
@@ -12,7 +13,6 @@ using STMMigration.Utils;
 namespace STMigration;
 
 class Program {
-
     #region Main Program
     static async Task Main(string[] args) {
         Console.WriteLine("[Migration] Slack -> Teams");
@@ -20,103 +20,54 @@ class Program {
         // Initialization
         var settings = AppSettings.LoadSettings();
 
-        InitializeIDLookUpTable();
-        InitializeHttpClient();
-        InitializeGraph(settings);
+        s_httpClient = new HttpClient();
+        s_messageSlackToTeamsIDs = LoadSerializedIDs();
+
+        s_graphClient = InitializeGraph(settings);
 
         // Greet user
-        await GreetUserAsync();
+        //await GreetUserAsync(s_graphClient);
 
         // Choose team to migrate too
-        string teamID = await GetTeamToMigrateToo();
+        // string teamID = await GetTeamToMigrateToo();
+        string teamID = await CreateTeam(s_graphClient, "Test Team X", "Test X Team");
 
         // Choose channel to migrate too
-        var (channelID, channelName) = await GetChannelToMigrateToo(teamID);
+        // var (channelID, channelName) = await GetChannelToMigrateToo(teamID);
+        var (channelID, channelName) = await CreateChannel(s_graphClient, teamID, "Test 233", "new test channel");
 
         // Scan and send messages in Teams
-        await ScanAndHandleMessages(args, teamID, channelID, channelName);
-    }
-    #endregion
-
-    #region Helpers
-    static async Task<(string, string)> GetChannelToMigrateToo(string teamID) {
-        Console.WriteLine();
-        Console.WriteLine($"Which Channel would you like to send a message too?");
-        var channels = await ListTeamChannelsAsync(teamID);
-
-        int choice;
-        do {
-            choice = UserInputIndexOfList();
-            if (choice < 0 || choice >= channels.Count) {
-                Console.WriteLine($"Not a valid selection, must be between 0 and {channels.Count}");
-            }
-        } while (choice < 0 || choice >= channels.Count);
-        string channelName = channels[choice].DisplayName;
-        Console.WriteLine($"You have chosen: {channelName}");
-
-        return (channels[choice].Id, channelName);
-    }
-
-    static async Task<string> GetTeamToMigrateToo() {
-        Console.WriteLine();
-        Console.WriteLine("Which Team would you like to migrate too?");
-        var joinedTeams = await ListJoinedTeamsAsync();
-
-        int choice;
-        do {
-            choice = UserInputIndexOfList();
-            if (choice < 0 || choice >= joinedTeams.Count) {
-                Console.WriteLine($"Not a valid selection, must be between 0 and {joinedTeams.Count}");
-            }
-        } while (choice < 0 || choice >= joinedTeams.Count);
-
-        Console.WriteLine($"You have chosen: {joinedTeams[choice].DisplayName}");
-
-        return joinedTeams[choice].Id;
-    }
-
-    static int UserInputIndexOfList() {
-        var choice = -1;
-
-        Console.Write("Select: ");
-        try {
-            choice = int.Parse(Console.ReadLine() ?? string.Empty);
-        } catch (FormatException ex) {
-            Console.WriteLine(ex.Message);
-        }
-        return choice;
+        await ScanAndHandleMessages(s_graphClient, s_httpClient, args, teamID, channelID, channelName);
     }
     #endregion
 
     #region Initialization
+    // The Microsoft Graph permission scopes used by the app
+    private static readonly string[] s_scopes = { "User.Read", "Mail.Read" };
+
+    // Graph client
+    private static GraphServiceClient? s_graphClient;
+
     private static Dictionary<string, string> s_messageSlackToTeamsIDs = new();
     private static HttpClient? s_httpClient;
 
-    static void InitializeHttpClient() {
-        s_httpClient = new HttpClient();
-    }
-
-    static void InitializeIDLookUpTable() {
-        s_messageSlackToTeamsIDs = LoadSerializedIDs();
-    }
-
-    static void InitializeGraph(AppSettings settings) {
+    static GraphServiceClient InitializeGraph(AppSettings settings) {
         Console.WriteLine();
 
-        GraphHelper.InitializeGraphForUserAuth(settings,
-            (info, cancel) => {
-                // Display the device code message to
-                // the user. This tells them
-                // where to go to sign in and provides the
-                // code to use.
-                Console.WriteLine(info.Message);
-                return Task.FromResult(0);
-            });
+        if (string.IsNullOrEmpty(settings.ClientId)) {
+            Console.Error.WriteLine($"Settings Client ID cannot be null");
+            Environment.Exit(1);
+        }
+
+        var authProvider = new DeviceCodeAuthProvider(
+                settings.ClientId, s_scopes);
+
+        return new GraphServiceClient(authProvider);
     }
     #endregion
 
     #region Message Handling
-    static async Task ScanAndHandleMessages(string[] args, string teamID, string channelID, string channelName) {
+    static async Task ScanAndHandleMessages(GraphServiceClient graphClient, HttpClient httpClient, string[] args, string teamID, string channelID, string channelName) {
         string directory = System.IO.Directory.GetCurrentDirectory();
         string slackArchiveBasePath = GetSlackArchiveBasePath(directory, args.Length > 0 ? args[0] : string.Empty);
         string slackChannelPath = GetSlackChannelPath(slackArchiveBasePath);
@@ -128,21 +79,21 @@ class Program {
             foreach (var message in Messages.GetMessagesForDay(file, slackUsers)) {
                 if (!message.AttachedFiles.IsNullOrEmpty()) {
                     foreach (var attachment in message.AttachedFiles) {
-                        await UploadFileToPath(teamID, channelName, attachment);
+                        await UploadFileToPath(graphClient, httpClient, teamID, channelName, attachment);
                     }
                 }
 
                 if (!message.IsInThread) {
-                    await SendMessageToTeamChannel(teamID, channelID, message, false);
+                    await SendMessageToTeamChannel(graphClient, teamID, channelID, message, false);
                     continue;
                 }
 
                 if (message.IsParentThread) {
-                    await SendMessageToTeamChannel(teamID, channelID, message, true);
+                    await SendMessageToTeamChannel(graphClient, teamID, channelID, message, true);
                     continue;
                 }
 
-                await SendMessageToChannelThread(teamID, channelID, message);
+                await SendMessageToChannelThread(graphClient, teamID, channelID, message);
             }
         }
     }
@@ -212,9 +163,9 @@ class Program {
     #endregion
 
     #region Graph Callers
-    static async Task GreetUserAsync() {
+    static async Task GreetUserAsync(GraphServiceClient graphClient) {
         try {
-            var user = await GraphHelper.GetUserAsync();
+            var user = await GraphHelper.GetUserAsync(graphClient);
             Console.WriteLine();
             Console.WriteLine($"Hello, {user?.DisplayName}!");
             // For Work/school accounts, email is in Mail property
@@ -225,20 +176,65 @@ class Program {
         }
     }
 
-    static async Task SendMessageToChannelThread(string teamID, string channelID, STMessage message) {
+    static async Task<string> CreateTeam(GraphServiceClient graphClient, string name, string description) {
+        string teamID = string.Empty;
+        try {
+            teamID = await GraphHelper.CreateTeamAsync(graphClient, name, description);
+        } catch (Exception ex) {
+            Console.WriteLine($"Error creating Team: {ex.Message}");
+            Environment.Exit(1);
+        }
+
+        if (string.IsNullOrEmpty(teamID)) {
+            Console.WriteLine($"Error creating Team, ID came back null!");
+            Environment.Exit(1);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Created Team '{name}' [{teamID}]");
+        return teamID;
+    }
+
+    static async Task<(string, string)> CreateChannel(GraphServiceClient graphClient, string teamID, string name, string description) {
+        string channelID = string.Empty;
+        string channelName = string.Empty;
+
+        try {
+            (channelID, channelName) = await GraphHelper.CreateChannelAsync(graphClient, teamID, name, description);
+        } catch (Exception ex) {
+            Console.WriteLine($"Error creating Team: {ex.Message}");
+            Environment.Exit(1);
+        }
+
+        if (string.IsNullOrEmpty(channelID)) {
+            Console.WriteLine($"Error creating Channel, ID came back null!");
+            Environment.Exit(1);
+        }
+
+        if (string.IsNullOrEmpty(channelName)) {
+            Console.WriteLine($"Error creating Channel, Name came back null!");
+            Environment.Exit(1);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Created Channel '{channelName}' [{channelID}]");
+        return (channelID, channelName);
+    }
+
+    static async Task SendMessageToChannelThread(GraphServiceClient graphClient, string teamID, string channelID, STMessage message) {
         try {
             bool result = s_messageSlackToTeamsIDs.TryGetValue(message.ThreadDate ?? message.Date, out string? threadID);
             if (result && !string.IsNullOrEmpty(threadID)) {
-                await GraphHelper.SendMessageToChannelThreadAsync(teamID, channelID, threadID, message);
+                await GraphHelper.SendMessageToChannelThreadAsync(graphClient, teamID, channelID, threadID, message);
             }
         } catch (Exception ex) {
             Console.WriteLine($"Error sending message: {ex.Message}");
         }
     }
 
-    static async Task SendMessageToTeamChannel(string teamID, string channelID, STMessage message, bool isParentThread) {
+    static async Task SendMessageToTeamChannel(GraphServiceClient graphClient, string teamID, string channelID, STMessage message, bool isParentThread) {
         try {
-            var teamsMessage = await GraphHelper.SendMessageToChannelAsync(teamID, channelID, message);
+            var teamsMessage = await GraphHelper.SendMessageToChannelAsync(graphClient, teamID, channelID, message);
             if (isParentThread) {
                 if (s_messageSlackToTeamsIDs.TryAdd(message.ThreadDate ?? message.Date, teamsMessage.Id)) {
                     SaveSerializeIDs(s_messageSlackToTeamsIDs);
@@ -249,47 +245,9 @@ class Program {
         }
     }
 
-    static async Task<ITeamChannelsCollectionPage> ListTeamChannelsAsync(string teamID) {
+    static async Task UploadFileToPath(GraphServiceClient graphClient, HttpClient httpClient, string teamID, string channelName, SimpleAttachment attachment) {
         try {
-            var channels = await GraphHelper.GetTeamChannelsAsync(teamID);
-
-            int index = 0;
-            foreach (var channel in channels) {
-                Console.WriteLine($"[{index}] {channel.DisplayName} ({channel.Id})");
-                index++;
-            }
-            return channels;
-        } catch (Exception ex) {
-            Console.WriteLine($"Error getting user's team channels: {ex.Message}");
-            Console.WriteLine($"");
-            throw;
-        }
-    }
-
-    static async Task<IUserJoinedTeamsCollectionPage> ListJoinedTeamsAsync() {
-        try {
-            var joinedTeams = await GraphHelper.GetJoinedTeamsAsync();
-
-            int index = 0;
-            foreach (var team in joinedTeams) {
-                Console.WriteLine($"[{index}] {team.DisplayName} ({team.Id})");
-                index++;
-            }
-            return joinedTeams;
-        } catch (Exception ex) {
-            Console.WriteLine($"Error getting user's teams: {ex.Message}");
-            Console.WriteLine($"");
-            throw;
-        }
-    }
-
-    static async Task UploadFileToPath(string teamID, string channelName, SimpleAttachment attachment) {
-        // Ensure client isn't null
-        _ = s_httpClient ??
-            throw new NullReferenceException("HTTP Client has not been initialized");
-
-        try {
-            await GraphHelper.UploadFileToTeamChannel(s_httpClient, teamID, channelName, attachment);
+            await GraphHelper.UploadFileToTeamChannel(graphClient, httpClient, teamID, channelName, attachment);
         } catch (Exception ex) {
             Console.WriteLine($"Error uploading file: {ex.Message}");
         }

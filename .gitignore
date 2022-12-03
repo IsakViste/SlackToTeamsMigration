@@ -11,8 +11,8 @@
 appsettings.json
 appsettings.*.json
 # Slack export zip extracted
-SlackExport
-
+SlackExport*
+*.messageIDs.json
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

@@ -1,78 +1,63 @@
-using System.Collections.Specialized;
-// Copyright (c) Isak Viste. All rights reserved.
-// Licensed under the MIT license.
-
 using System.Text.RegularExpressions;
-using Azure.Core;
-using Azure.Identity;
 using Microsoft.Graph;
 using STMigration.Models;
 
 namespace STMigration;
 
-class GraphHelper {
+public static class GraphHelper {
+    #region Team Handling
+    public static async Task<string> CreateTeamAsync(GraphServiceClient gsc, string name, string description) {
+        var team = new Team {
+            DisplayName = name,
+            Description = description,
+            AdditionalData = new Dictionary<string, object>()
+                {
+                    {"template@odata.bind", "https://graph.microsoft.com/v1.0/teamsTemplates('standard')"},
+                    {"@microsoft.graph.teamCreationMode", "migration"}
+                }
+        };
 
-    #region Initialization
-    private static DeviceCodeCredential? s_deviceCodeCredential;
-    private static GraphServiceClient? s_userClient;
+        var createdTeam = await gsc.Teams
+            .Request()
+            .AddAsync(team);
 
-    private static readonly string[] s_scopes = new string[] {
-      "user.read"
-    };
-
-    private static readonly DriveItemUploadableProperties s_uploadSettings = new() {
-        AdditionalData = new Dictionary<string, object>
-            {
-                { "@microsoft.graph.conflictBehavior", "rename" }
-            }
-    };
-
-    public static void InitializeGraphForUserAuth(AppSettings settings,
-        Func<DeviceCodeInfo, CancellationToken, Task> deviceCodePrompt) {
-        s_deviceCodeCredential = new DeviceCodeCredential(deviceCodePrompt,
-            settings.AuthTenant, settings.ClientId);
-
-        s_userClient = new GraphServiceClient(s_deviceCodeCredential, s_scopes);
+        return createdTeam.Id;
     }
 
-    public static async Task<string> GetUserTokenAsync() {
-        // Ensure credential isn't null
-        _ = s_deviceCodeCredential ??
-            throw new NullReferenceException("Graph has not been initialized for user auth");
+    public static async Task<(string, string)> CreateChannelAsync(GraphServiceClient gsc, string teamID, string name, string description) {
+        var channel = new Channel {
+            DisplayName = name,
+            Description = description,
+            MembershipType = ChannelMembershipType.Standard,
+            AdditionalData = new Dictionary<string, object>()
+                {
+                    {"@microsoft.graph.channelCreationMode", "migration"}
+                }
+        };
 
-        // Ensure scopes isn't null
-        _ = s_scopes ?? throw new ArgumentNullException("Argument 'scopes' cannot be null");
+        var createdChannel = await gsc.Teams[teamID].Channels
+            .Request()
+            .AddAsync(channel);
 
-        // Request token with given scopes
-        var context = new TokenRequestContext(s_scopes);
-        var response = await s_deviceCodeCredential.GetTokenAsync(context);
-        return response.Token;
+        return (createdChannel.Id, createdChannel.DisplayName);
     }
     #endregion
 
     #region Sending Messages
-    public static async Task SendMessageToChannelThreadAsync(string teamID, string channelID, string threadID, STMessage message) {
-        // Ensure client isn't null
-        _ = s_userClient ??
-            throw new NullReferenceException("Graph has not been initialized for user auth");
-
+    public static async Task SendMessageToChannelThreadAsync(GraphServiceClient gsc, string teamID, string channelID, string threadID, STMessage message) {
         var msg = MessageToSend(message);
 
         // Send the message
-        _ = await s_userClient.Teams[teamID].Channels[channelID].Messages[threadID].Replies
+        _ = await gsc.Teams[teamID].Channels[channelID].Messages[threadID].Replies
             .Request()
             .AddAsync(msg);
     }
 
-    public static async Task<ChatMessage> SendMessageToChannelAsync(string teamID, string channelID, STMessage message) {
-        // Ensure client isn't null
-        _ = s_userClient ??
-            throw new NullReferenceException("Graph has not been initialized for user auth");
-
+    public static async Task<ChatMessage> SendMessageToChannelAsync(GraphServiceClient gsc, string teamID, string channelID, STMessage message) {
         var msg = MessageToSend(message);
 
         // Send the message
-        return await s_userClient.Teams[teamID].Channels[channelID].Messages
+        return await gsc.Teams[teamID].Channels[channelID].Messages
             .Request()
             .AddAsync(msg);
     }
@@ -94,45 +79,15 @@ class GraphHelper {
                 Content = message.FormattedMessage(),
                 ContentType = BodyType.Html,
             },
-            Attachments = attachments
+            Attachments = attachments,
+            CreatedDateTime = message.FormattedLocalTime()
         };
     }
     #endregion
 
     #region Getters
-    public static Task<ITeamChannelsCollectionPage> GetTeamChannelsAsync(string teamID) {
-        _ = s_userClient ??
-            throw new NullReferenceException("Graph has not been initialized for user auth");
-
-        return s_userClient.Teams[teamID].Channels
-            .Request()
-            .Select(c => new {
-                c.Id,
-                c.DisplayName
-            })
-            .GetAsync();
-    }
-
-    public static Task<IUserJoinedTeamsCollectionPage> GetJoinedTeamsAsync() {
-        _ = s_userClient ??
-            throw new NullReferenceException("Graph has not been initialized for user auth");
-
-        return s_userClient.Me
-            .JoinedTeams
-            .Request()
-            .Select(t => new {
-                t.Id,
-                t.DisplayName
-            })
-            .GetAsync();
-    }
-
-    public static Task<User> GetUserAsync() {
-        // Ensure client isn't null
-        _ = s_userClient ??
-            throw new NullReferenceException("Graph has not been initialized for user auth");
-
-        return s_userClient.Me
+    public static Task<User> GetUserAsync(GraphServiceClient gsc) {
+        return gsc.Me
             .Request()
             .Select(u => new {
                 // Only request specific properties
@@ -147,15 +102,17 @@ class GraphHelper {
     #region Upload Files
     private static readonly Regex s_regexGUID = new(@"\{([^{}]+)\}*");
 
-    public static async Task UploadFileToTeamChannel(HttpClient client, string teamID, string channelName, SimpleAttachment attachment) {
-        // Ensure client isn't null
-        _ = s_userClient ??
-            throw new NullReferenceException("Graph has not been initialized for user auth");
-
+    private static readonly DriveItemUploadableProperties s_uploadSettings = new() {
+        AdditionalData = new Dictionary<string, object>
+            {
+                { "@microsoft.graph.conflictBehavior", "rename" }
+            }
+    };
+    public static async Task UploadFileToTeamChannel(GraphServiceClient gsc, HttpClient client, string teamID, string channelName, SimpleAttachment attachment) {
         // Create the upload session
         // itemPath does not need to be a path to an existing item
         string pathToItem = $"/{channelName}/{attachment.Date}/{attachment.Name}";
-        var uploadSession = await s_userClient
+        var uploadSession = await gsc
             .Groups[teamID]
             .Drive
             .Root
