@@ -13,6 +13,9 @@ public class STMessage {
     public string Text { get; private set; }
     public List<STAttachment> AttachedFiles { get; private set; }
 
+    // Team Message IDs are the Timestamp followed by 000
+    public string? TeamID => $"{ThreadDate?.Split(".")[0]}000";
+
     public STMessage(STUser? user, string date, string? threadDate, string text, List<STAttachment> attachedFiles) {
         User = user;
 
@@ -25,22 +28,16 @@ public class STMessage {
         AttachedFiles = attachedFiles;
     }
 
-    public string FormattedMessage(bool includeUser) {
-        if (includeUser) {
-            if (User != null) {
-                return $"<strong>{User.DisplayName}</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
-            }
-
-            return $"<strong>Unknown User</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
-        }
-
+    public string FormattedMessage() {
         return $"<blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
     }
 
     public string FormattedText() {
-        string formattedText = Text.TrimEnd().Replace("\n", "<br>");
+        StringBuilder stringBuilder = new(Text.TrimEnd());
 
-        return formattedText;
+        stringBuilder.Replace("\n", "<br>");
+
+        return stringBuilder.ToString();
     }
 
     public DateTime FormattedLocalTime() {

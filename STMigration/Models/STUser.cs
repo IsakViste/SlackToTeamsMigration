@@ -1,4 +1,3 @@
-using Microsoft.Graph;
 using Newtonsoft.Json;
 
 namespace STMigration.Models;

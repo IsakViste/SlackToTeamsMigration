@@ -131,7 +131,7 @@ public class GraphHelper {
 
     #region Channel Handling
     public async Task<(string, string)> CreateChannelAsync(string teamID, string dirName) {
-        Channel channel = new(dirName, "2020-04-14T11:22:17.047Z");
+        STChannel channel = new(dirName, "2020-04-14T11:22:17.047Z");
         string json = JsonConvert.SerializeObject(channel);
         json = json.Replace("}", ", \"@microsoft.graph.channelCreationMode\": \"migration\"}");
         var content = new StringContent(json, Encoding.UTF8, "application/json");
@@ -220,11 +220,11 @@ public class GraphHelper {
     #endregion
 
     #region Sending Messages
-    public async Task SendMessageToChannelThreadAsync(string teamID, string channelID, string threadID, STMessage message) {
+    public async Task<ChatMessage> SendMessageToChannelThreadAsync(string teamID, string channelID, string threadID, STMessage message) {
         var msg = MessageToSend(message);
 
         // Send the message
-        _ = await GraphClient.Teams[teamID].Channels[channelID].Messages[threadID].Replies
+        return await GraphClient.Teams[teamID].Channels[channelID].Messages[threadID].Replies
             .Request()
             .AddAsync(msg);
     }
@@ -238,7 +238,7 @@ public class GraphHelper {
             .AddAsync(msg);
     }
 
-    private ChatMessage MessageToSend(STMessage message) {
+    private static ChatMessage MessageToSend(STMessage message) {
         var attachments = new List<ChatMessageAttachment>();
         // foreach (var attachment in message.AttachedFiles) {
         //     attachments.Add(new ChatMessageAttachment {
@@ -249,34 +249,16 @@ public class GraphHelper {
         //     });
         // }
 
-        if (message.User != null) {
-            if (!string.IsNullOrEmpty(message.User.TeamsUserID)) {
-                // Message that has a team user equivalent
-                return new ChatMessage {
-                    Body = new ItemBody {
-                        Content = message.FormattedMessage(false),
-                        ContentType = BodyType.Html,
-                    },
-                    From = new ChatMessageFromIdentitySet {
-                        User = new Identity {
-                            Id = message.User.TeamsUserID,
-                            DisplayName = message.User.DisplayName
-                        }
-                    },
-                    Attachments = attachments,
-                    CreatedDateTime = message.FormattedLocalTime()
-                };
-            }
-
-            // Message that doesn't have team user equivalent
+        if (message.User != null && !string.IsNullOrEmpty(message.User.TeamsUserID)) {
+            // Message that has a team user equivalent
             return new ChatMessage {
                 Body = new ItemBody {
-                    Content = message.FormattedMessage(true),
+                    Content = message.FormattedMessage(),
                     ContentType = BodyType.Html,
                 },
                 From = new ChatMessageFromIdentitySet {
                     User = new Identity {
-                        Id = Config.OwnerUserId,
+                        Id = message.User.TeamsUserID,
                         DisplayName = message.User.DisplayName
                     }
                 },
@@ -285,15 +267,15 @@ public class GraphHelper {
             };
         }
 
+        // Message that doesn't have team user equivalent
         return new ChatMessage {
             Body = new ItemBody {
-                Content = message.FormattedMessage(true),
+                Content = message.FormattedMessage(),
                 ContentType = BodyType.Html,
             },
             From = new ChatMessageFromIdentitySet {
                 User = new Identity {
-                    Id = Config.OwnerUserId,
-                    DisplayName = "Unknown"
+                    DisplayName = message.User?.DisplayName ?? "Unknown"
                 }
             },
             Attachments = attachments,

@@ -27,8 +27,10 @@ public class MessageHandling {
 
                 string? messageTS = obj.SelectToken("ts")?.ToString();
                 if (string.IsNullOrEmpty(messageTS)) {
+                    Console.ForegroundColor = ConsoleColor.Red;
                     Console.Error.WriteLine($"{messageTS} is not valid in");
                     Console.Error.WriteLine($"{obj}");
+                    Console.ResetColor();
                     Console.WriteLine();
                     continue;
                 }

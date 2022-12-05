@@ -1,8 +1,6 @@
 ﻿// Copyright (c) Isak Viste. All rights reserved.
 // Licensed under the MIT license.
 
-using Microsoft.IdentityModel.Tokens;
-using Newtonsoft.Json;
 using STMigration.Models;
 using STMigration.Utils;
 using STMMigration.Utils;
@@ -75,8 +73,6 @@ class Program {
     }
 
     #region Message Handling
-    private static readonly Dictionary<string, string> s_messageSlackToTeamsIDs = new();
-
     static async Task ScanAndHandleMessages(GraphHelper graphHelper, string slackArchiveBasePath, List<STUser> userList, string teamID) {
         foreach (var dir in Directory.GetDirectories(slackArchiveBasePath)) {
             // Create migration channel
@@ -100,13 +96,8 @@ class Program {
                     //     }
                     // }
 
-                    if (!message.IsInThread) {
-                        await SendMessageToTeamChannel(graphHelper, teamID, channelID, message, false);
-                        continue;
-                    }
-
-                    if (message.IsParentThread) {
-                        await SendMessageToTeamChannel(graphHelper, teamID, channelID, message, true);
+                    if (!message.IsInThread || message.IsParentThread) {
+                        await SendMessageToTeamChannel(graphHelper, teamID, channelID, message);
                         continue;
                     }
 
@@ -283,9 +274,8 @@ class Program {
 
     static async Task SendMessageToChannelThread(GraphHelper graphHelper, string teamID, string channelID, STMessage message) {
         try {
-            bool result = s_messageSlackToTeamsIDs.TryGetValue(message.ThreadDate ?? message.Date, out string? threadID);
-            if (result && !string.IsNullOrEmpty(threadID)) {
-                await graphHelper.SendMessageToChannelThreadAsync(teamID, channelID, threadID, message);
+            if (!string.IsNullOrEmpty(message.TeamID)) {
+                var teamsMessage = await graphHelper.SendMessageToChannelThreadAsync(teamID, channelID, message.TeamID, message);
             }
         } catch (Exception ex) {
             Console.ForegroundColor = ConsoleColor.Red;
@@ -294,14 +284,9 @@ class Program {
         }
     }
 
-    static async Task SendMessageToTeamChannel(GraphHelper graphHelper, string teamID, string channelID, STMessage message, bool isParentThread) {
+    static async Task SendMessageToTeamChannel(GraphHelper graphHelper, string teamID, string channelID, STMessage message) {
         try {
             var teamsMessage = await graphHelper.SendMessageToChannelAsync(teamID, channelID, message);
-            if (isParentThread) {
-                if (s_messageSlackToTeamsIDs.TryAdd(message.ThreadDate ?? message.Date, teamsMessage.Id)) {
-                    //SaveSerializeIDs(s_messageSlackToTeamsIDs);
-                }
-            }
         } catch (Exception ex) {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error sending message: {ex.Message}");
@@ -317,38 +302,6 @@ class Program {
             Console.WriteLine($"Error uploading file: {ex.Message}");
             Console.ResetColor();
         }
-    }
-    #endregion
-
-    #region Slack Teams IDs
-    static readonly string s_lookupTable = "LookupTable-IDS.json";
-
-    static void SaveSerializeIDs(Dictionary<string, string> dict) {
-        using StreamWriter file = File.CreateText(s_lookupTable);
-
-        JsonSerializer serializer = new();
-        serializer.Serialize(file, dict);
-    }
-
-    static Dictionary<string, string> LoadSerializedIDs() {
-        try {
-            using StreamReader file = File.OpenText(s_lookupTable);
-
-            JsonSerializer serializer = new();
-            var serializedIDs = serializer.Deserialize(file, typeof(Dictionary<string, string>));
-
-            return (Dictionary<string, string>?)serializedIDs ?? new();
-        } catch (FileNotFoundException) {
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("No existing lookup table, will create one!");
-            Console.ResetColor();
-        } catch (Exception ex) {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine(ex);
-            Console.ResetColor();
-        }
-
-        return new();
     }
     #endregion
 }
