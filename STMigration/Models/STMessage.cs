@@ -13,8 +13,8 @@ public class STMessage {
     public string Text { get; private set; }
     public List<STAttachment> AttachedFiles { get; private set; }
 
-    // Team Message IDs are the Timestamp followed by 000
-    public string? TeamID => $"{ThreadDate?.Split(".")[0]}000";
+    // Team Message IDs are the Timestamps first 13 digits
+    public string? TeamID => $"{ThreadDate?.Replace(".", "")[..13]}";
 
     public STMessage(STUser? user, string date, string? threadDate, string text, List<STAttachment> attachedFiles) {
         User = user;
@@ -41,7 +41,8 @@ public class STMessage {
     }
 
     public DateTime FormattedLocalTime() {
-        return DateTimeOffset.FromUnixTimeSeconds(long.Parse(Date.Split(".")[0])).LocalDateTime;
+        var ms = long.Parse(Date.Replace(".", "")) / 1000;
+        return DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime;
     }
 
     public string FormattedAttachments() {

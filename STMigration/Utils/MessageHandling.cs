@@ -15,7 +15,9 @@ public class MessageHandling {
     }
 
     public static IEnumerable<STMessage> GetMessagesForDay(string messagesPath, List<STUser> users) {
+        Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine($"File {messagesPath}");
+        Console.ResetColor();
 
         using FileStream fs = new(messagesPath, FileMode.Open, FileAccess.Read);
         using StreamReader sr = new(fs);
@@ -110,8 +112,6 @@ public class MessageHandling {
                     //Console.Write($"{userGroup}\n");
                     break;
                 case "emoji":
-                    //Console.WriteLine();
-                    break;
                 default:
                     break;
             }

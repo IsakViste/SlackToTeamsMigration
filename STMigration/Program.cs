@@ -23,8 +23,12 @@ class Program {
     }
 
     private static async Task RunAsync(string[] args) {
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine("[Migration] Slack -> Teams");
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        Console.WriteLine();
+        Console.WriteLine("================================");
+        Console.WriteLine("|| [MIGRATION] Slack -> Teams ||");
+        Console.WriteLine("================================");
+        Console.WriteLine();
         Console.ResetColor();
 
         // Initialization
@@ -38,7 +42,9 @@ class Program {
 
         bool loadCurrentUserList = false;
         if (UsersHelper.UserListExists()) {
+            Console.ForegroundColor = ConsoleColor.Cyan;
             Console.Write("Do you want to load the current userList? [Y/n] ");
+            Console.ResetColor();
             string? input = Console.ReadLine();
             if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
                 loadCurrentUserList = true;
@@ -115,9 +121,13 @@ class Program {
 
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.DarkGreen;
-        Console.WriteLine("!! MIGRATION WAS A SUCCESS !!");
-        Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"Team [{teamID}] has been migrated!");
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.DarkRed;
+        Console.WriteLine("===================================");
+        Console.WriteLine("|| !! MIGRATION WAS A SUCCESS !! ||");
+        Console.WriteLine("===================================");
+        Console.WriteLine();
         Console.ResetColor();
     }
     #endregion
@@ -176,6 +186,7 @@ class Program {
 
         Console.ForegroundColor = ConsoleColor.Blue;
         Console.WriteLine($"Successfully retrieved: {slackArchiveBasePath}");
+        Console.WriteLine();
         Console.ResetColor();
 
         return slackArchiveBasePath;
@@ -222,7 +233,7 @@ class Program {
         }
 
         Console.WriteLine();
-        Console.ForegroundColor = ConsoleColor.Green;
+        Console.ForegroundColor = ConsoleColor.DarkGreen;
         Console.WriteLine($"Created Team with ID: {teamID}");
         Console.ResetColor();
 
