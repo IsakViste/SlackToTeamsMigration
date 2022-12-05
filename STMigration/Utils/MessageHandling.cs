@@ -7,14 +7,14 @@ using STMigration.Models;
 
 namespace STMigration.Utils;
 
-public class Messages {
+public class MessageHandling {
     public static IEnumerable<string> GetFilesForChannel(string channelPath) {
         foreach (var file in Directory.GetFiles(channelPath)) {
             yield return file;
         }
     }
 
-    public static IEnumerable<STMessage> GetMessagesForDay(string messagesPath, List<SimpleUser> slackUsers) {
+    public static IEnumerable<STMessage> GetMessagesForDay(string messagesPath, List<STUser> users) {
         Console.WriteLine($"File {messagesPath}");
 
         using FileStream fs = new(messagesPath, FileMode.Open, FileAccess.Read);
@@ -33,10 +33,10 @@ public class Messages {
                     continue;
                 }
 
-                string messageSender = FindMessageSender(obj, slackUsers);
-                string messageText = GetFormattedText(obj, slackUsers);
+                STUser? messageSender = FindMessageSender(obj, users);
+                string messageText = GetFormattedText(obj, users);
 
-                List<SimpleAttachment> attachments = GetFormattedAttachments(obj);
+                List<STAttachment> attachments = GetFormattedAttachments(obj);
 
                 string? threadTS = obj.SelectToken("thread_ts")?.ToString();
 
@@ -47,7 +47,7 @@ public class Messages {
         }
     }
 
-    static string GetFormattedText(JObject obj, List<SimpleUser> slackUserList) {
+    static string GetFormattedText(JObject obj, List<STUser> userList) {
         var richTextArray = obj.SelectTokens("blocks[0].elements[0].elements[*]").ToList();
 
         // Simple text, get it directly from text field
@@ -95,7 +95,7 @@ public class Messages {
                         break;
                     }
 
-                    string displayName = DisplayNameFromUserID(slackUserList, userID);
+                    string displayName = DisplayNameFromUserID(userList, userID);
 
                     _ = formattedText.Append($"@{displayName}");
                     //Console.Write($"{user}\n");
@@ -118,10 +118,37 @@ public class Messages {
         return formattedText.ToString();
     }
 
-    static List<SimpleAttachment> GetFormattedAttachments(JObject obj) {
+    static STUser? FindMessageSender(JObject obj, List<STUser> userList) {
+        var userID = obj.SelectToken("user")?.ToString();
+
+        if (!string.IsNullOrEmpty(userID)) {
+            if (userID == "USLACKBOT") {
+                return STUser.SLACK_BOT;
+            }
+
+            return userList.FirstOrDefault(user => user.SlackUserID == userID);
+        }
+
+        return null;
+    }
+
+    static string DisplayNameFromUserID(List<STUser> userList, string userID) {
+        if (userID != "USLACKBOT") {
+            var simpleUser = userList.FirstOrDefault(user => user.SlackUserID == userID);
+            if (simpleUser != null) {
+                return simpleUser.DisplayName;
+            }
+
+            return "Unknown User";
+        }
+
+        return "SlackBot";
+    }
+
+    static List<STAttachment> GetFormattedAttachments(JObject obj) {
         var attachmentsArray = obj.SelectTokens("files[*]").ToList();
 
-        List<SimpleAttachment> formattedAttachments = new();
+        List<STAttachment> formattedAttachments = new();
         int index = 0;
         foreach (var attachment in attachmentsArray) {
             string? url = attachment.SelectToken("url_private_download")?.ToString();
@@ -136,41 +163,10 @@ public class Messages {
                 continue;
             }
 
-            formattedAttachments.Add(new SimpleAttachment(url, fileType, title, date));
+            formattedAttachments.Add(new STAttachment(url, fileType, title, date));
             index++;
         }
 
         return formattedAttachments;
-    }
-
-    static string DisplayNameFromUserID(List<SimpleUser> slackUserList, string userID) {
-        if (userID != "USLACKBOT") {
-            var simpleUser = slackUserList.FirstOrDefault(w => w.UserId == userID);
-            if (simpleUser != null) {
-                return simpleUser.DisplayName;
-            }
-        }
-
-        return "SlackBot";
-    }
-
-    static string FindMessageSender(JObject obj, List<SimpleUser> slackUserList) {
-        var userID = obj.SelectToken("user")?.ToString();
-
-        if (!string.IsNullOrEmpty(userID)) {
-            return DisplayNameFromUserID(slackUserList, userID);
-        }
-
-        string? username = obj.SelectToken("username")?.ToString();
-        if (!string.IsNullOrEmpty(username)) {
-            return username;
-        }
-
-        string? bot_id = obj.SelectToken("bot_id")?.ToString();
-        if (!string.IsNullOrEmpty(bot_id)) {
-            return bot_id;
-        }
-
-        return "";
     }
 }

@@ -3,7 +3,7 @@
 namespace STMigration.Models;
 
 public class STMessage {
-    public string User { get; private set; }
+    public STUser? User { get; private set; }
 
     public string Date { get; private set; }
     public string? ThreadDate { get; private set; }
@@ -11,9 +11,9 @@ public class STMessage {
     public bool IsParentThread { get; private set; }
 
     public string Text { get; private set; }
-    public List<SimpleAttachment> AttachedFiles { get; private set; }
+    public List<STAttachment> AttachedFiles { get; private set; }
 
-    public STMessage(string user, string date, string? threadDate, string text, List<SimpleAttachment> attachedFiles) {
+    public STMessage(STUser? user, string date, string? threadDate, string text, List<STAttachment> attachedFiles) {
         User = user;
 
         Date = date;
@@ -25,8 +25,16 @@ public class STMessage {
         AttachedFiles = attachedFiles;
     }
 
-    public string FormattedMessage() {
-        return $"<strong>{User}</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
+    public string FormattedMessage(bool includeUser) {
+        if (includeUser) {
+            if (User != null) {
+                return $"<strong>{User.DisplayName}</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
+            }
+
+            return $"<strong>Unknown User</strong><br><blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
+        }
+
+        return $"<blockquote>{FormattedText()}</blockquote>{FormattedAttachments()}";
     }
 
     public string FormattedText() {

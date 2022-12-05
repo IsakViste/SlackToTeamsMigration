@@ -1,6 +1,6 @@
 ﻿namespace STMigration.Models;
 
-public class SimpleAttachment {
+public class STAttachment {
 
     public string SlackURL { get; set; }
     public string Name { get; set; }
@@ -10,7 +10,7 @@ public class SimpleAttachment {
     public string TeamsURL { get; set; }
     public string TeamsGUID { get; set; }
 
-    public SimpleAttachment(string slackURL, string? extension, string? name, string? date) {
+    public STAttachment(string slackURL, string? extension, string? name, string? date) {
         SlackURL = slackURL;
         Name = name ?? "";
         Date = date ?? "";

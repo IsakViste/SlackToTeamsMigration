@@ -1,9 +1,6 @@
 ﻿// Copyright (c) Isak Viste. All rights reserved.
 // Licensed under the MIT license.
 
-using System.Net.Http.Headers;
-using Microsoft.Graph;
-using Microsoft.Identity.Client;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using STMigration.Models;
@@ -28,126 +25,148 @@ class Program {
     }
 
     private static async Task RunAsync(string[] args) {
+        Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine("[Migration] Slack -> Teams");
+        Console.ResetColor();
 
         // Initialization
         AuthenticationConfig config = AuthenticationConfig.ReadFromJsonFile("appsettings.json");
-
-        // Even if this is a console application here, a daemon application is a confidential client application
-        IConfidentialClientApplication app;
-
-        app = ConfidentialClientApplicationBuilder.Create(config.ClientId)
-                    .WithClientSecret(config.ClientSecret)
-                    .WithAuthority(new Uri(config.Authority))
-                    .Build();
-
-        // With client credentials flows the scopes is ALWAYS of the shape "resource/.default", as the 
-        // application permissions need to be set statically (in the portal or by PowerShell), and then granted by
-        // a tenant administrator. 
-        string[] scopes = new string[] { $"{config.ApiUrl}.default" }; // Generates a scope -> "https://graph.microsoft.com/.default"
+        GraphHelper graphHelper = new(config);
 
         //s_messageSlackToTeamsIDs = LoadSerializedIDs();
 
-        // Create new migration team
-        string teamID = await CreateTeam(config, app, scopes);
+        string directory = Directory.GetCurrentDirectory();
+        string slackArchiveBasePath = GetSlackArchiveBasePath(directory, args.Length > 0 ? args[0] : string.Empty);
 
-        await Task.Delay(5000);
+        bool loadCurrentUserList = false;
+        if (UsersHelper.UserListExists()) {
+            Console.Write("Do you want to load the current userList? [Y/n] ");
+            string? input = Console.ReadLine();
+            if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
+                loadCurrentUserList = true;
+            }
+        }
+
+        List<STUser> userList = await ScanAndHandleUsers(graphHelper, slackArchiveBasePath, loadCurrentUserList);
+
+        // Create new migration team
+        string teamID = await CreateTeam(graphHelper);
 
         // Scan and send messages in Teams
-        await ScanAndHandleMessages(config, app, scopes, args, teamID);
+        await ScanAndHandleMessages(graphHelper, slackArchiveBasePath, userList, teamID);
     }
     #endregion
 
-    /// <summary>
-    /// An example of how to authenticate the Microsoft Graph SDK using the MSAL library
-    /// </summary>
-    /// <returns></returns>
-    private static GraphServiceClient GetAuthenticatedGraphClient(IConfidentialClientApplication app, string[] scopes) {
-        GraphServiceClient graphServiceClient =
-                new("https://graph.microsoft.com/V1.0/", new DelegateAuthenticationProvider(async (requestMessage) => {
-                    // Retrieve an access token for Microsoft Graph (gets a fresh token if needed).
-                    AuthenticationResult result = await app.AcquireTokenForClient(scopes)
-                        .ExecuteAsync();
+    static async Task<List<STUser>> ScanAndHandleUsers(GraphHelper graphHelper, string slackArchiveBasePath, bool loadUserListInstead) {
+        if (loadUserListInstead) {
+            Console.ForegroundColor = ConsoleColor.Blue;
+            Console.WriteLine("Loading user from pre-computed userList!");
+            Console.ResetColor();
+            return UsersHelper.LoadUserList();
+        }
 
-                    // Add the access token in the Authorization header of the API request.
-                    requestMessage.Headers.Authorization =
-                        new AuthenticationHeaderValue("Bearer", result.AccessToken);
-                }));
+        string slackUsersPath = GetSlackUsersPath(slackArchiveBasePath);
 
-        return graphServiceClient;
+        List<STUser> userList = UsersHelper.ScanUsersFromSlack(slackUsersPath);
+        await UsersHelper.PopulateTeamsUsers(graphHelper, userList);
+        UsersHelper.StoreUserList(userList);
+
+        return userList;
     }
 
     #region Message Handling
-    private static Dictionary<string, string> s_messageSlackToTeamsIDs = new();
+    private static readonly Dictionary<string, string> s_messageSlackToTeamsIDs = new();
 
-    static async Task ScanAndHandleMessages(AuthenticationConfig config, IConfidentialClientApplication app, string[] scopes, string[] args, string teamID) {
-        GraphServiceClient graphClient;
-        string ownerUserId = config.OwnerUserId;
-
-        string directory = System.IO.Directory.GetCurrentDirectory();
-        string slackArchiveBasePath = GetSlackArchiveBasePath(directory, args.Length > 0 ? args[0] : string.Empty);
-        // string slackChannelPath = GetSlackChannelPath(slackArchiveBasePath);
-        string slackUsersPath = GetSlackUsersPath(slackArchiveBasePath);
-
-        List<SimpleUser> slackUsers = Users.ScanUsers(slackUsersPath);
-
-        foreach (var dir in System.IO.Directory.GetDirectories(slackArchiveBasePath)) {
+    static async Task ScanAndHandleMessages(GraphHelper graphHelper, string slackArchiveBasePath, List<STUser> userList, string teamID) {
+        foreach (var dir in Directory.GetDirectories(slackArchiveBasePath)) {
             // Create migration channel
             string dirName = dir.Split("\\").Last();
             string? channelID, channelName;
             if (dirName == "xGeneral") {
-                (channelID, channelName) = await GetGeneralChannel(app, scopes, teamID);
+                (channelID, channelName) = await GetGeneralChannel(graphHelper, teamID);
             } else {
-                (channelID, channelName) = await CreateChannel(config, app, scopes, teamID, dirName);
+                (channelID, channelName) = await CreateChannel(graphHelper, teamID, dirName);
             }
 
             if (string.IsNullOrEmpty(channelID) || string.IsNullOrEmpty(channelName)) {
                 continue;
             }
 
-            foreach (var file in Messages.GetFilesForChannel(dir)) {
-                foreach (var message in Messages.GetMessagesForDay(file, slackUsers)) {
-                    graphClient = GetAuthenticatedGraphClient(app, scopes);
-
-                    if (!message.AttachedFiles.IsNullOrEmpty()) {
-                        foreach (var attachment in message.AttachedFiles) {
-                            await UploadFileToPath(graphClient, teamID, channelName, attachment);
-                        }
-                    }
+            foreach (var file in MessageHandling.GetFilesForChannel(dir)) {
+                foreach (var message in MessageHandling.GetMessagesForDay(file, userList)) {
+                    // if (!message.AttachedFiles.IsNullOrEmpty()) {
+                    //     foreach (var attachment in message.AttachedFiles) {
+                    //         await UploadFileToPath(graphHelper, teamID, channelName, attachment);
+                    //     }
+                    // }
 
                     if (!message.IsInThread) {
-                        await SendMessageToTeamChannel(graphClient, teamID, channelID, ownerUserId, message, false);
+                        await SendMessageToTeamChannel(graphHelper, teamID, channelID, message, false);
                         continue;
                     }
 
                     if (message.IsParentThread) {
-                        await SendMessageToTeamChannel(graphClient, teamID, channelID, ownerUserId, message, true);
+                        await SendMessageToTeamChannel(graphHelper, teamID, channelID, message, true);
                         continue;
                     }
 
-                    await SendMessageToChannelThread(graphClient, teamID, channelID, ownerUserId, message);
+                    await SendMessageToChannelThread(graphHelper, teamID, channelID, message);
                 }
             }
 
-            await GraphHelper.CompleteChannelMigrationAsync(config, app, scopes, teamID, channelID);
+            await CompleteChannelMigrationAsync(graphHelper, teamID, channelID);
+            Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"Channel {channelName} [{channelID}] has been migrated!");
+            Console.ResetColor();
         }
 
-        await GraphHelper.CompleteTeamMigrationAsync(config, app, scopes, teamID);
+        await CompleteTeamMigrationAsync(graphHelper, teamID);
 
         Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.DarkGreen;
+        Console.WriteLine("!! MIGRATION WAS A SUCCESS !!");
+        Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"Team [{teamID}] has been migrated!");
+        Console.ResetColor();
+    }
+    #endregion
+
+    #region Migration Handling
+    static async Task CompleteChannelMigrationAsync(GraphHelper graphHelper, string teamID, string channelID) {
+        try {
+            await graphHelper.CompleteChannelMigrationAsync(teamID, channelID);
+        } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Error finishing migration of channel: {ex.Message}");
+            Console.ResetColor();
+            Environment.Exit(1);
+        }
     }
 
+    static async Task CompleteTeamMigrationAsync(GraphHelper graphHelper, string teamID) {
+        try {
+            await graphHelper.CompleteTeamMigrationAsync(teamID);
+        } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Error finishing migration of team: {ex.Message}");
+            Console.ResetColor();
+            Environment.Exit(1);
+        }
+    }
+    #endregion
+
+    #region File Handling
     static string GetSlackArchiveBasePath(string directory, string arg) {
         string slackArchiveBasePath = string.Empty;
         bool isValidPath = false;
 
         if (!string.IsNullOrEmpty(arg)) {
             slackArchiveBasePath = Path.GetFullPath(Path.Combine(directory, @arg));
-            isValidPath = System.IO.Directory.Exists(slackArchiveBasePath);
+            isValidPath = Directory.Exists(slackArchiveBasePath);
             if (!isValidPath) {
+                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"{slackArchiveBasePath} is not a valid path!");
+                Console.ResetColor();
             }
         }
 
@@ -156,13 +175,17 @@ class Program {
             Console.Write("Relative path to local Slack Archive folder: ");
             var userReadPath = Console.ReadLine() ?? string.Empty;
             slackArchiveBasePath = Path.GetFullPath(Path.Combine(directory, @userReadPath));
-            isValidPath = System.IO.Directory.Exists(slackArchiveBasePath);
+            isValidPath = Directory.Exists(slackArchiveBasePath);
             if (!isValidPath) {
+                Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine($"{slackArchiveBasePath} is not a valid path! Try again...");
+                Console.ResetColor();
             }
         }
 
+        Console.ForegroundColor = ConsoleColor.Blue;
         Console.WriteLine($"Successfully retrieved: {slackArchiveBasePath}");
+        Console.ResetColor();
 
         return slackArchiveBasePath;
     }
@@ -170,13 +193,17 @@ class Program {
     static string GetSlackUsersPath(string slackArchiveBasePath) {
         string slackUsersPath = Path.Combine(slackArchiveBasePath, "users.json");
 
-        if (!System.IO.File.Exists(slackUsersPath)) {
+        if (!File.Exists(slackUsersPath)) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Could not find users json: {slackUsersPath}");
             Console.WriteLine("Exiting...");
+            Console.ResetColor();
             Environment.Exit(1);
         }
 
+        Console.ForegroundColor = ConsoleColor.Blue;
         Console.WriteLine($"Successfully retrieved: {slackUsersPath}");
+        Console.ResetColor();
         Console.WriteLine();
 
         return slackUsersPath;
@@ -184,90 +211,111 @@ class Program {
     #endregion
 
     #region Graph Callers
-    static async Task<string> CreateTeam(AuthenticationConfig config, IConfidentialClientApplication app, string[] scopes) {
+    static async Task<string> CreateTeam(GraphHelper graphHelper) {
         string teamID = string.Empty;
 
         try {
-            teamID = await GraphHelper.CreateTeamAsync(config, app, scopes);
+            teamID = await graphHelper.CreateTeamAsync();
         } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error creating Team: {ex.Message}");
+            Console.ResetColor();
             Environment.Exit(1);
         }
 
         if (string.IsNullOrEmpty(teamID)) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error creating Team, ID came back null!");
+            Console.ResetColor();
             Environment.Exit(1);
         }
 
         Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"Created Team with ID: {teamID}");
+        Console.ResetColor();
+
+        await Task.Delay(2000); // ? Wait for team to be accessible (otherwise first channel migration will fail!)
+
         return teamID;
     }
 
-    static async Task<(string, string)> GetGeneralChannel(IConfidentialClientApplication app, string[] scopes, string teamID) {
-        GraphServiceClient graphClient = GetAuthenticatedGraphClient(app, scopes);
-
+    static async Task<(string, string)> GetGeneralChannel(GraphHelper graphHelper, string teamID) {
         string channelID = string.Empty;
         string channelName = string.Empty;
 
         try {
-            (channelID, channelName) = await GraphHelper.GetGeneralChannelAsync(graphClient, teamID);
+            (channelID, channelName) = await graphHelper.GetGeneralChannelAsync(teamID);
         } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error getting General Channel: {ex.Message}");
+            Console.ResetColor();
             Environment.Exit(1);
         }
 
         Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"Got General Channel '{channelName}' [{channelID}]");
+        Console.ResetColor();
         return (channelID, channelName);
     }
 
-    static async Task<(string?, string?)> CreateChannel(AuthenticationConfig config, IConfidentialClientApplication app, string[] scopes, string teamID, string dirName) {
+    static async Task<(string?, string?)> CreateChannel(GraphHelper graphHelper, string teamID, string dirName) {
 
         string channelID = string.Empty;
         string channelName = string.Empty;
 
         try {
-            (channelID, channelName) = await GraphHelper.CreateChannelAsync(config, app, scopes, teamID, dirName);
+            (channelID, channelName) = await graphHelper.CreateChannelAsync(teamID, dirName);
         } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error creating Channel: {ex.Message}");
+            Console.ResetColor();
             return (channelID, channelName);
         }
 
         Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
         Console.WriteLine($"Created Channel '{channelName}' [{channelID}]");
+        Console.ResetColor();
         return (channelID, channelName);
     }
 
-    static async Task SendMessageToChannelThread(GraphServiceClient graphClient, string teamID, string channelID, string ownerUserId, STMessage message) {
+    static async Task SendMessageToChannelThread(GraphHelper graphHelper, string teamID, string channelID, STMessage message) {
         try {
             bool result = s_messageSlackToTeamsIDs.TryGetValue(message.ThreadDate ?? message.Date, out string? threadID);
             if (result && !string.IsNullOrEmpty(threadID)) {
-                await GraphHelper.SendMessageToChannelThreadAsync(graphClient, teamID, channelID, threadID, ownerUserId, message);
+                await graphHelper.SendMessageToChannelThreadAsync(teamID, channelID, threadID, message);
             }
         } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error sending message: {ex.Message}");
+            Console.ResetColor();
         }
     }
 
-    static async Task SendMessageToTeamChannel(GraphServiceClient graphClient, string teamID, string channelID, string ownerUserId, STMessage message, bool isParentThread) {
+    static async Task SendMessageToTeamChannel(GraphHelper graphHelper, string teamID, string channelID, STMessage message, bool isParentThread) {
         try {
-            var teamsMessage = await GraphHelper.SendMessageToChannelAsync(graphClient, teamID, channelID, ownerUserId, message);
+            var teamsMessage = await graphHelper.SendMessageToChannelAsync(teamID, channelID, message);
             if (isParentThread) {
                 if (s_messageSlackToTeamsIDs.TryAdd(message.ThreadDate ?? message.Date, teamsMessage.Id)) {
                     //SaveSerializeIDs(s_messageSlackToTeamsIDs);
                 }
             }
         } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error sending message: {ex.Message}");
+            Console.ResetColor();
         }
     }
 
-    static async Task UploadFileToPath(GraphServiceClient graphClient, string teamID, string channelName, SimpleAttachment attachment) {
+    static async Task UploadFileToPath(GraphHelper graphHelper, string teamID, string channelName, STAttachment attachment) {
         try {
-            await GraphHelper.UploadFileToTeamChannel(graphClient, teamID, channelName, attachment);
+            await graphHelper.UploadFileToTeamChannel(teamID, channelName, attachment);
         } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error uploading file: {ex.Message}");
+            Console.ResetColor();
         }
     }
     #endregion
@@ -276,7 +324,7 @@ class Program {
     static readonly string s_lookupTable = "LookupTable-IDS.json";
 
     static void SaveSerializeIDs(Dictionary<string, string> dict) {
-        using StreamWriter file = System.IO.File.CreateText(s_lookupTable);
+        using StreamWriter file = File.CreateText(s_lookupTable);
 
         JsonSerializer serializer = new();
         serializer.Serialize(file, dict);
@@ -284,16 +332,20 @@ class Program {
 
     static Dictionary<string, string> LoadSerializedIDs() {
         try {
-            using StreamReader file = System.IO.File.OpenText(s_lookupTable);
+            using StreamReader file = File.OpenText(s_lookupTable);
 
             JsonSerializer serializer = new();
             var serializedIDs = serializer.Deserialize(file, typeof(Dictionary<string, string>));
 
             return (Dictionary<string, string>?)serializedIDs ?? new();
         } catch (FileNotFoundException) {
+            Console.ForegroundColor = ConsoleColor.Blue;
             Console.WriteLine("No existing lookup table, will create one!");
+            Console.ResetColor();
         } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine(ex);
+            Console.ResetColor();
         }
 
         return new();

@@ -3,9 +3,8 @@
 
 using System.Globalization;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Graph;
 
-namespace STMigration;
+namespace STMigration.Utils;
 
 #pragma warning disable CS8618
 
