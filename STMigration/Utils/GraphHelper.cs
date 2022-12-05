@@ -89,6 +89,16 @@ public class GraphHelper {
     #endregion
 
     #region Team Handling
+    public async Task<IUserJoinedTeamsCollectionPage> GetJoinedTeamsAsync() {
+        return await GraphClient.Users[Config.OwnerUserId].JoinedTeams
+            .Request()
+            .Select(t => new {
+                t.Id,
+                t.DisplayName
+            })
+            .GetAsync();
+    }
+
     public async Task<string> CreateTeamAsync() {
         using StreamReader reader = new("Data/team.json");
         string json = reader.ReadToEnd();
@@ -130,12 +140,14 @@ public class GraphHelper {
     #endregion
 
     #region Channel Handling
-    public async Task<(string, string)> CreateChannelAsync(string teamID, string dirName) {
+    public async Task<string> CreateChannelAsync(string teamID, string dirName) {
         STChannel channel = new(dirName, "2020-04-14T11:22:17.047Z");
         string json = JsonConvert.SerializeObject(channel);
-        json = json.Replace("}", ", \"@microsoft.graph.channelCreationMode\": \"migration\"}");
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
+        // Set creation mode to migration!
+        json = json.Replace("}", ", \"@microsoft.graph.channelCreationMode\": \"migration\"}");
+
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await PostToMSGraph($"teams/{teamID}/channels", content);
 
         if (response == null) {
@@ -150,17 +162,12 @@ public class GraphHelper {
         }
 
         string? channelID = jsonNode["id"]?.GetValue<string>();
-        string? channelName = jsonNode["displayName"]?.GetValue<string>();
 
         if (string.IsNullOrEmpty(channelID)) {
             throw new ArgumentNullException("channelID", "cannot be null");
         }
 
-        if (string.IsNullOrEmpty(channelName)) {
-            throw new ArgumentNullException("channelName", "cannot be null");
-        }
-
-        return (channelID, channelName);
+        return channelID;
     }
 
     public async Task CompleteChannelMigrationAsync(string teamID, string channelID) {
@@ -181,7 +188,7 @@ public class GraphHelper {
         .GetAsync();
     }
 
-    public async Task<(string, string)> GetGeneralChannelAsync(string teamID) {
+    public async Task<string> GetChannelByNameAsync(string teamID, string channelName) {
         var channels = await GraphClient.Teams[teamID].Channels
             .Request()
             .Select(c => new {
@@ -191,31 +198,30 @@ public class GraphHelper {
             })
             .GetAsync();
 
-        string generalID = string.Empty;
-        foreach (var channel in channels) {
-            if (channel.DisplayName.ToLower() == "general") {
-                generalID = channel.Id;
+        string channelID = string.Empty;
+        foreach (var ch in channels) {
+            if (ch.DisplayName.ToLower() == channelName.ToLower()) {
+                channelID = ch.Id;
                 break;
             }
         }
 
-        if (string.IsNullOrEmpty(generalID)) {
-            throw new ArgumentNullException("generalID", "cannot be null");
+        if (string.IsNullOrEmpty(channelID)) {
+            throw new ArgumentNullException("chanelID", "cannot be null");
         }
 
-        var generalChannel = await GraphClient.Teams[teamID].Channels[generalID]
+        var channel = await GraphClient.Teams[teamID].Channels[channelID]
             .Request()
             .Select(c => new {
-                c.DisplayName,
                 c.Id,
             })
             .GetAsync();
 
-        if (string.IsNullOrEmpty(generalChannel.Id) || string.IsNullOrEmpty(generalChannel.DisplayName)) {
-            throw new ArgumentNullException("generalChannel", "must contain ID and DisplayName");
+        if (string.IsNullOrEmpty(channel.Id)) {
+            throw new ArgumentNullException("channel", "must contain ID");
         }
 
-        return (generalChannel.Id, generalChannel.DisplayName);
+        return channel.Id;
     }
     #endregion
 
@@ -239,16 +245,6 @@ public class GraphHelper {
     }
 
     private static ChatMessage MessageToSend(STMessage message) {
-        var attachments = new List<ChatMessageAttachment>();
-        // foreach (var attachment in message.AttachedFiles) {
-        //     attachments.Add(new ChatMessageAttachment {
-        //         Id = attachment.TeamsGUID,
-        //         ContentType = "reference",
-        //         ContentUrl = attachment.TeamsURL,
-        //         Name = attachment.Name
-        //     });
-        // }
-
         if (message.User != null && !string.IsNullOrEmpty(message.User.TeamsUserID)) {
             // Message that has a team user equivalent
             return new ChatMessage {
@@ -262,7 +258,6 @@ public class GraphHelper {
                         DisplayName = message.User.DisplayName
                     }
                 },
-                Attachments = attachments,
                 CreatedDateTime = message.FormattedLocalTime()
             };
         }
@@ -278,7 +273,6 @@ public class GraphHelper {
                     DisplayName = message.User?.DisplayName ?? "Unknown"
                 }
             },
-            Attachments = attachments,
             CreatedDateTime = message.FormattedLocalTime()
         };
     }
@@ -294,7 +288,7 @@ public class GraphHelper {
             }
     };
 
-    public async Task UploadFileToTeamChannel(string teamID, string channelName, STAttachment attachment) {
+    public async Task UploadFileToTeamChannelAsync(string teamID, string channelName, STAttachment attachment) {
         // Create the upload session
         // itemPath does not need to be a path to an existing item
         string pathToItem = $"/{channelName}/{attachment.Date}/{attachment.Name}";
@@ -337,6 +331,34 @@ public class GraphHelper {
         } catch (ServiceException ex) {
             Console.WriteLine($"Error uploading: {ex}");
         }
+    }
+
+    public async Task AddAttachmentsToMessageAsync(string teamID, string channelID, List<STAttachment> attachmentList) {
+        var attachments = new List<ChatMessageAttachment>();
+
+        foreach (var attachment in attachmentList) {
+            attachments.Add(new ChatMessageAttachment {
+                Id = attachment.TeamsGUID,
+                ContentType = "reference",
+                ContentUrl = attachment.TeamsURL,
+                Name = attachment.Name
+            });
+        }
+
+        var message = await GraphClient.Teams[teamID].Channels[channelID].Messages[attachmentList[0].MessageTS]
+            .Request().GetAsync();
+
+        // Set the attachments of the message
+        message.Attachments = attachments;
+
+        // Add attachments links to the message content (this is necessary for the preview to show up)
+        var bodyContent = new StringBuilder(message.Body.Content);
+        bodyContent.Append(STMessage.FormattedAttachments(attachmentList));
+        message.Body.Content = bodyContent.ToString();
+
+        _ = await GraphClient.Teams[teamID].Channels[channelID].Messages[attachmentList[0].MessageTS]
+            .Request().UpdateAsync(message);
+
     }
     #endregion
 }

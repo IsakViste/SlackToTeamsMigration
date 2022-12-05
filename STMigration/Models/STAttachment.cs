@@ -1,6 +1,7 @@
 ﻿namespace STMigration.Models;
 
 public class STAttachment {
+    public string MessageTS { get; private set; }
 
     public string SlackURL { get; set; }
     public string Name { get; set; }
@@ -10,7 +11,9 @@ public class STAttachment {
     public string TeamsURL { get; set; }
     public string TeamsGUID { get; set; }
 
-    public STAttachment(string slackURL, string? extension, string? name, string? date) {
+    public STAttachment(string slackURL, string? extension, string? name, string? date, string messageTS) {
+        MessageTS = messageTS.Replace(".", "")[..13];
+
         SlackURL = slackURL;
         Name = name ?? "";
         Date = date ?? "";

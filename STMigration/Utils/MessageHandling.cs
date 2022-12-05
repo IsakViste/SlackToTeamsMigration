@@ -14,12 +14,41 @@ public class MessageHandling {
         }
     }
 
-    public static IEnumerable<STMessage> GetMessagesForDay(string messagesPath, List<STUser> users) {
+    public static IEnumerable<List<STAttachment>> GetAttachmentsForDay(string path) {
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"File {messagesPath}");
+        Console.WriteLine($"File {path}");
         Console.ResetColor();
 
-        using FileStream fs = new(messagesPath, FileMode.Open, FileAccess.Read);
+        using FileStream fs = new(path, FileMode.Open, FileAccess.Read);
+        using StreamReader sr = new(fs);
+        using JsonTextReader reader = new(sr);
+
+        while (reader.Read()) {
+            if (reader.TokenType == JsonToken.StartObject) {
+                JObject obj = JObject.Load(reader);
+
+                string? messageTS = obj.SelectToken("ts")?.ToString();
+                if (string.IsNullOrEmpty(messageTS)) {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.Error.WriteLine($"{messageTS} is not valid in");
+                    Console.Error.WriteLine($"{obj}");
+                    Console.ResetColor();
+                    Console.WriteLine();
+                    continue;
+                }
+
+                List<STAttachment> attachments = GetFormattedAttachments(obj, messageTS);
+                yield return attachments;
+            }
+        }
+    }
+
+    public static IEnumerable<STMessage> GetMessagesForDay(string path, List<STUser> users) {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"File {path}");
+        Console.ResetColor();
+
+        using FileStream fs = new(path, FileMode.Open, FileAccess.Read);
         using StreamReader sr = new(fs);
         using JsonTextReader reader = new(sr);
 
@@ -40,11 +69,9 @@ public class MessageHandling {
                 STUser? messageSender = FindMessageSender(obj, users);
                 string messageText = GetFormattedText(obj, users);
 
-                List<STAttachment> attachments = GetFormattedAttachments(obj);
-
                 string? threadTS = obj.SelectToken("thread_ts")?.ToString();
 
-                STMessage message = new(messageSender, messageTS, threadTS, messageText, attachments);
+                STMessage message = new(messageSender, messageTS, threadTS, messageText);
 
                 yield return message;
             }
@@ -147,7 +174,7 @@ public class MessageHandling {
         return "SlackBot";
     }
 
-    static List<STAttachment> GetFormattedAttachments(JObject obj) {
+    static List<STAttachment> GetFormattedAttachments(JObject obj, string messageTS) {
         var attachmentsArray = obj.SelectTokens("files[*]").ToList();
 
         List<STAttachment> formattedAttachments = new();
@@ -165,7 +192,7 @@ public class MessageHandling {
                 continue;
             }
 
-            formattedAttachments.Add(new STAttachment(url, fileType, title, date));
+            formattedAttachments.Add(new STAttachment(url, fileType, title, date, messageTS));
             index++;
         }
 
