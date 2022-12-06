@@ -31,7 +31,11 @@ public class STMessage {
     public string FormattedMessage(bool attachedFiles) {
         string attachments = attachedFiles ? FormattedAttachedAttachments() : FormattedAttachments();
         string formattedText = FormattedText();
+
         if (string.IsNullOrEmpty(formattedText)) {
+            if (string.IsNullOrEmpty(attachments)) {
+                return "EMPTY TEXT<br>Possibly a reference to a message/thread";
+            }
             return attachments;
         }
 

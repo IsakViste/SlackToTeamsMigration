@@ -127,6 +127,16 @@ public class MessageHandling {
                     //Console.Write($"{userGroup}\n");
                     break;
                 case "emoji":
+                    // TODO: Figure out channel display name
+                    _ = formattedText.Append("EMOJI");
+                    break;
+                case "channel":
+                    // TODO: Figure out channel display name
+                    _ = formattedText.Append("@CHANNEL");
+                    break;
+                case "broadcast":
+                    // TODO: What is this??
+                    _ = formattedText.Append("@BROADCASTING");
                     break;
                 default:
                     Console.ForegroundColor = ConsoleColor.Red;

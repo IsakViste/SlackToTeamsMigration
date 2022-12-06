@@ -86,8 +86,8 @@ class Program {
         /*
         ** MIGRATE ATTACHMENTS TO EXISTING TEAM
         */
-        Console.ForegroundColor = ConsoleColor.DarkYellow;
         Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
         Console.Write("Do you want to migrate ATTACHMENTS to a team? [Y/n] ");
         Console.ResetColor();
         input = Console.ReadLine();
@@ -120,6 +120,19 @@ class Program {
             await UploadAttachments(graphHelper, slackArchiveBasePath, userList, teamID);
         }
 
+        /*
+        ** Finish migration of a team if necessary
+        */
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.Write("Do you want to finish migrating an existing team stuck in migration? [y/N] ");
+        Console.ResetColor();
+        input = Console.ReadLine();
+
+        if (!string.IsNullOrEmpty(input) && (input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true")) {
+            await FinishMigrating(graphHelper);
+        }
+
         static int UserInputIndexOfList() {
             var choice = -1;
 
@@ -135,6 +148,23 @@ class Program {
         }
     }
     #endregion
+
+    // If migration failed and you're left with a team stuck in migration mode, use this function!
+    private static async Task FinishMigrating(GraphHelper graphHelper) {
+        string? teamID;
+        do {
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.Write("Which team do you want to finish migrating? ");
+            Console.ResetColor();
+            teamID = Console.ReadLine();
+        } while (string.IsNullOrEmpty(teamID));
+
+        foreach (var channel in await ListJoinedTeamsAsync(graphHelper, teamID)) {
+            await CompleteChannelMigrationAsync(graphHelper, teamID, channel.Id, channel.DisplayName);
+        }
+
+        await CompleteTeamMigrationAsync(graphHelper, teamID);
+    }
 
     static async Task UploadAttachments(GraphHelper graphHelper, string slackArchiveBasePath, List<STUser> userList, string teamID) {
         foreach (var dir in Directory.GetDirectories(slackArchiveBasePath)) {
@@ -257,7 +287,8 @@ class Program {
             string dirName = dir.Split("\\").Last();
             string? channelID;
             if (dirName == "zzzGeneral") {
-                channelID = await GetChannelByName(graphHelper, teamID, "General");
+                dirName = "General";
+                channelID = await GetChannelByName(graphHelper, teamID, dirName);
             } else {
                 channelID = await CreateChannel(graphHelper, teamID, dirName);
             }
@@ -277,18 +308,11 @@ class Program {
                 }
             }
 
-            await CompleteChannelMigrationAsync(graphHelper, teamID, channelID);
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"Channel {dirName} [{channelID}] has been migrated!");
-            Console.ResetColor();
+            await CompleteChannelMigrationAsync(graphHelper, teamID, channelID, dirName);
         }
 
         await CompleteTeamMigrationAsync(graphHelper, teamID);
 
-        Console.WriteLine();
-        Console.ForegroundColor = ConsoleColor.DarkGreen;
-        Console.WriteLine($"Team [{teamID}] has been migrated!");
-        Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.DarkRed;
         Console.WriteLine("===============================================");
         Console.WriteLine("|| !! MIGRATION OF MESSAGES WAS A SUCCESS !! ||");
@@ -298,7 +322,7 @@ class Program {
     #endregion
 
     #region Migration Handling
-    static async Task CompleteChannelMigrationAsync(GraphHelper graphHelper, string teamID, string channelID) {
+    static async Task CompleteChannelMigrationAsync(GraphHelper graphHelper, string teamID, string channelID, string channelName) {
         try {
             await graphHelper.CompleteChannelMigrationAsync(teamID, channelID);
         } catch (Exception ex) {
@@ -307,6 +331,10 @@ class Program {
             Console.ResetColor();
             Environment.Exit(1);
         }
+
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"Channel {channelName} [{channelID}] has been migrated!");
+        Console.ResetColor();
     }
 
     static async Task CompleteTeamMigrationAsync(GraphHelper graphHelper, string teamID) {
@@ -318,6 +346,12 @@ class Program {
             Console.ResetColor();
             Environment.Exit(1);
         }
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.DarkGreen;
+        Console.WriteLine($"Team [{teamID}] has been migrated!");
+        Console.WriteLine();
+        Console.ResetColor();
     }
     #endregion
 
@@ -428,6 +462,18 @@ class Program {
         } catch (Exception ex) {
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine($"Error getting user's teams: {ex.Message}");
+            Console.ResetColor();
+            throw;
+        }
+    }
+
+    static async Task<Microsoft.Graph.ITeamChannelsCollectionPage> ListJoinedTeamsAsync(GraphHelper graphHelper, string teamID) {
+        try {
+            var channels = await graphHelper.GetTeamsChannelsAsync(teamID);
+            return channels;
+        } catch (Exception ex) {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"Error getting teams channels: {ex.Message}");
             Console.ResetColor();
             throw;
         }

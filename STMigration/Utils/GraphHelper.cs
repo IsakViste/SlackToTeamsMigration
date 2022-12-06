@@ -140,6 +140,16 @@ public class GraphHelper {
     #endregion
 
     #region Channel Handling
+    public async Task<ITeamChannelsCollectionPage> GetTeamsChannelsAsync(string teamID) {
+        return await GraphClient.Teams[teamID].Channels
+            .Request()
+            .Select(c => new {
+                c.Id,
+                c.DisplayName,
+            })
+            .GetAsync();
+    }
+
     public static readonly string CHANNEL_CREATION_DATE = "2019-09-17T11:22:17.067Z";
     public async Task<string> CreateChannelAsync(string teamID, string dirName) {
         STChannel channel = new(dirName, CHANNEL_CREATION_DATE);
