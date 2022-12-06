@@ -57,26 +57,27 @@ public class UsersHelper {
         }
     }
 
-    static readonly string s_userListFile = "userList.json";
+    public static readonly string USER_LIST_FILE = "userList.json";
     public static void StoreUserList(List<STUser> userList) {
-        using StreamWriter file = File.CreateText(s_userListFile);
+        using StreamWriter file = File.CreateText(USER_LIST_FILE);
 
         JsonSerializer serializer = new() {
             Formatting = Formatting.Indented
         };
         serializer.Serialize(file, userList);
-        Console.ForegroundColor = ConsoleColor.Blue;
-        Console.WriteLine($"Stored computed users to {s_userListFile}");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine();
+        Console.WriteLine($"Stored computed users to {Path.GetFullPath(USER_LIST_FILE)}");
         Console.ResetColor();
     }
 
     public static bool UserListExists() {
-        return File.Exists(s_userListFile);
+        return File.Exists(USER_LIST_FILE);
     }
 
     public static List<STUser> LoadUserList() {
         try {
-            using StreamReader file = File.OpenText(s_userListFile);
+            using StreamReader file = File.OpenText(USER_LIST_FILE);
 
             JsonSerializer serializer = new();
             var userList = serializer.Deserialize(file, typeof(List<STUser>));

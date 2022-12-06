@@ -11,11 +11,12 @@ public class STMessage {
     public bool IsParentThread { get; private set; }
 
     public string Text { get; private set; }
+    public List<STAttachment> Attachments { get; set; }
 
     // Team Message IDs are the Timestamps first 13 digits
     public string? TeamID => $"{ThreadDate?.Replace(".", "")[..13]}";
 
-    public STMessage(STUser? user, string date, string? threadDate, string text) {
+    public STMessage(STUser? user, string date, string? threadDate, string text, List<STAttachment> attachments) {
         User = user;
 
         Date = date;
@@ -24,10 +25,11 @@ public class STMessage {
         IsParentThread = IsInThread && ThreadDate == Date;
 
         Text = text;
+        Attachments = attachments;
     }
 
     public string FormattedMessage() {
-        return $"<blockquote>{FormattedText()}</blockquote>";
+        return $"<blockquote>{FormattedText()}{FormattedAttachments()}</blockquote>";
     }
 
     public string FormattedText() {
@@ -43,9 +45,9 @@ public class STMessage {
         return DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime;
     }
 
-    public static string FormattedAttachments(List<STAttachment> attachedFiles) {
+    public string FormattedAttachments() {
         StringBuilder formattedText = new();
-        foreach (var att in attachedFiles) {
+        foreach (var att in Attachments) {
             _ = formattedText.Append($"<attachment id='{att.TeamsGUID}'></attachment>");
         }
 

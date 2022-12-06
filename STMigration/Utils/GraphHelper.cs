@@ -99,8 +99,8 @@ public class GraphHelper {
             .GetAsync();
     }
 
-    public async Task<string> CreateTeamAsync() {
-        using StreamReader reader = new("Data/team.json");
+    public async Task<string> CreateTeamAsync(string dataFile) {
+        using StreamReader reader = new(dataFile);
         string json = reader.ReadToEnd();
         var content = new StringContent(json, Encoding.UTF8, "application/json");
 
@@ -244,23 +244,8 @@ public class GraphHelper {
             .AddAsync(msg);
     }
 
-    private static ChatMessage MessageToSend(STMessage message) {
-        if (message.User != null && !string.IsNullOrEmpty(message.User.TeamsUserID)) {
-            // Message that has a team user equivalent
-            return new ChatMessage {
-                Body = new ItemBody {
-                    Content = message.FormattedMessage(),
-                    ContentType = BodyType.Html,
-                },
-                From = new ChatMessageFromIdentitySet {
-                    User = new Identity {
-                        Id = message.User.TeamsUserID,
-                        DisplayName = message.User.DisplayName
-                    }
-                },
-                CreatedDateTime = message.FormattedLocalTime()
-            };
-        }
+    private static ChatMessage MessageToSend(STMessage message, List<ChatMessageAttachment>? attachments = null) {
+        ChatMessageFromIdentitySet messageFrom = MessageFrom(message);
 
         // Message that doesn't have team user equivalent
         return new ChatMessage {
@@ -268,12 +253,28 @@ public class GraphHelper {
                 Content = message.FormattedMessage(),
                 ContentType = BodyType.Html,
             },
-            From = new ChatMessageFromIdentitySet {
-                User = new Identity {
-                    DisplayName = message.User?.DisplayName ?? "Unknown"
-                }
-            },
+            From = messageFrom,
+            Attachments = attachments,
             CreatedDateTime = message.FormattedLocalTime()
+        };
+    }
+
+    private static ChatMessageFromIdentitySet MessageFrom(STMessage message) {
+        if (message.User != null && !string.IsNullOrEmpty(message.User.TeamsUserID)) {
+            // User with TeamID (well mapped!)
+            return new ChatMessageFromIdentitySet {
+                User = new Identity {
+                    Id = message.User.TeamsUserID,
+                    DisplayName = message.User.DisplayName
+                }
+            };
+        }
+
+        // User without TeamID (bad mapped!)
+        return new ChatMessageFromIdentitySet {
+            User = new Identity {
+                DisplayName = message.User?.DisplayName ?? "Unknown"
+            }
         };
     }
     #endregion
@@ -333,10 +334,10 @@ public class GraphHelper {
         }
     }
 
-    public async Task AddAttachmentsToMessageAsync(string teamID, string channelID, List<STAttachment> attachmentList) {
+    public async Task AddAttachmentsToMessageAsync(string teamID, string channelID, STMessage message) {
         var attachments = new List<ChatMessageAttachment>();
 
-        foreach (var attachment in attachmentList) {
+        foreach (var attachment in message.Attachments) {
             attachments.Add(new ChatMessageAttachment {
                 Id = attachment.TeamsGUID,
                 ContentType = "reference",
@@ -345,20 +346,30 @@ public class GraphHelper {
             });
         }
 
-        var message = await GraphClient.Teams[teamID].Channels[channelID].Messages[attachmentList[0].MessageTS]
-            .Request().GetAsync();
+        var messageFrom = MessageFrom(message);
+        messageFrom.Application = null;
+        messageFrom.Device = null;
 
-        // Set the attachments of the message
-        message.Attachments = attachments;
+        var msg = new ChatMessage {
+            MessageType = ChatMessageType.Message,
+            Subject = null,
+            Summary = null,
+            Importance = ChatMessageImportance.Normal,
+            Locale = "en-us",
+            From = messageFrom,
+            Body = new ItemBody {
+                Content = message.FormattedMessage(),
+                ContentType = BodyType.Html,
+            },
+            Attachments = attachments,
+            Mentions = new List<ChatMessageMention>() {
+            },
+            Reactions = new List<ChatMessageReaction>() {
+            },
+        };
 
-        // Add attachments links to the message content (this is necessary for the preview to show up)
-        var bodyContent = new StringBuilder(message.Body.Content);
-        bodyContent.Append(STMessage.FormattedAttachments(attachmentList));
-        message.Body.Content = bodyContent.ToString();
-
-        _ = await GraphClient.Teams[teamID].Channels[channelID].Messages[attachmentList[0].MessageTS]
-            .Request().UpdateAsync(message);
-
+        _ = await GraphClient.Teams[teamID].Channels[channelID].Messages[message.TeamID]
+            .Request().UpdateAsync(msg);
     }
     #endregion
 }
