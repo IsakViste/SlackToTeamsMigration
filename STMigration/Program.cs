@@ -141,14 +141,14 @@ class Program {
             string channelID = string.Empty;
             string channelName = dir.Split("\\").Last();
 
-            if (channelName == "xGeneral") {
+            if (channelName == "zzzGeneral") {
                 channelName = "General";
             }
 
             channelID = await GetChannelByName(graphHelper, teamID, channelName);
 
             foreach (var file in MessageHandling.GetFilesForChannel(dir)) {
-                foreach (var message in MessageHandling.GetMessagesForDay(file, userList, true)) {
+                foreach (var message in MessageHandling.GetMessagesForDay(file, userList)) {
                     if (message == null || !message.Attachments.Any()) {
                         continue;
                     }
@@ -165,11 +165,33 @@ class Program {
 
     #region User Handling
     static async Task<List<STUser>> ScanAndHandleUsers(GraphHelper graphHelper, string slackArchiveBasePath, bool loadUserListInstead) {
+        string? input;
+
         if (loadUserListInstead) {
             Console.ForegroundColor = ConsoleColor.Blue;
             Console.WriteLine("Loading user from existing User List!");
+
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.Write("Do you want to populate TeamIDs? [Y/n] ");
             Console.ResetColor();
-            return UsersHelper.LoadUserList();
+            input = Console.ReadLine();
+
+            List<STUser> users = UsersHelper.LoadUserList();
+            if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
+                await UsersHelper.PopulateTeamsUsers(graphHelper, users);
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.WriteLine("The Users Team IDs have been updated!");
+                Console.ResetColor();
+
+                UsersHelper.StoreUserList(users);
+                return users;
+            } else {
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.WriteLine("The Users Team IDS have been kept as is!");
+                Console.ResetColor();
+            }
+
+            return users;
         }
 
         string slackUsersPath = GetSlackUsersPath(slackArchiveBasePath);
@@ -192,13 +214,33 @@ class Program {
         Console.ForegroundColor = ConsoleColor.DarkYellow;
         Console.Write("Do you want to reload the User List from disk? [Y/n] ");
         Console.ResetColor();
-        string? input = Console.ReadLine();
+        input = Console.ReadLine();
 
         if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
+            List<STUser> users = UsersHelper.LoadUserList();
             Console.ForegroundColor = ConsoleColor.Blue;
             Console.WriteLine("The User List has been reloaded!");
             Console.ResetColor();
-            return UsersHelper.LoadUserList();
+
+            Console.ForegroundColor = ConsoleColor.DarkYellow;
+            Console.Write("Do you want to populate TeamIDs? [Y/n] ");
+            Console.ResetColor();
+            input = Console.ReadLine();
+
+            if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
+                await UsersHelper.PopulateTeamsUsers(graphHelper, users);
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.WriteLine("The Users Team IDs have been updated!");
+                Console.ResetColor();
+
+                UsersHelper.StoreUserList(users);
+            } else {
+                Console.ForegroundColor = ConsoleColor.Blue;
+                Console.WriteLine("The Users Team IDS have been kept as is!");
+                Console.ResetColor();
+            }
+
+            return users;
         }
 
         Console.ForegroundColor = ConsoleColor.Blue;
@@ -214,7 +256,7 @@ class Program {
             // Create migration channel
             string dirName = dir.Split("\\").Last();
             string? channelID;
-            if (dirName == "xGeneral") {
+            if (dirName == "zzzGeneral") {
                 channelID = await GetChannelByName(graphHelper, teamID, "General");
             } else {
                 channelID = await CreateChannel(graphHelper, teamID, dirName);
@@ -225,7 +267,7 @@ class Program {
             }
 
             foreach (var file in MessageHandling.GetFilesForChannel(dir)) {
-                foreach (var message in MessageHandling.GetMessagesForDay(file, userList, false)) {
+                foreach (var message in MessageHandling.GetMessagesForDay(file, userList)) {
                     if (!message.IsInThread || message.IsParentThread) {
                         await SendMessageToTeamChannel(graphHelper, teamID, channelID, message);
                         continue;
@@ -349,7 +391,6 @@ class Program {
     public static readonly string TEAM_DATA_FILE = "Data/team.json";
     static async Task<string> CreateTeam(GraphHelper graphHelper) {
         Console.ForegroundColor = ConsoleColor.Blue;
-        Console.WriteLine();
         Console.WriteLine($"Creating new Team from data of: {TEAM_DATA_FILE}");
         Console.ResetColor();
 

@@ -51,9 +51,5 @@ public class STAttachment {
         string timeString = $"{dateTime.Hour:D2}.{dateTime.Minute:D2}.{dateTime.Second:D2}";
         FormattedName(timeString);
     }
-
-    public override string ToString() {
-        return $"[{Date}] {Name} (.{Extension})\n{TeamsURL}\n{TeamsGUID}";
-    }
 }
 

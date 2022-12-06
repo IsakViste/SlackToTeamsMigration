@@ -28,8 +28,18 @@ public class STMessage {
         Attachments = attachments;
     }
 
-    public string FormattedMessage() {
-        return $"<blockquote>{FormattedText()}{FormattedAttachments()}</blockquote>";
+    public string FormattedMessage(bool attachedFiles) {
+        string attachments = attachedFiles ? FormattedAttachedAttachments() : FormattedAttachments();
+        string formattedText = FormattedText();
+        if (string.IsNullOrEmpty(formattedText)) {
+            return attachments;
+        }
+
+        if (string.IsNullOrEmpty(attachments)) {
+            return $"{formattedText}";
+        }
+
+        return $"{formattedText}<blockquote>{attachments}</blockquote>";
     }
 
     public string FormattedText() {
@@ -46,6 +56,15 @@ public class STMessage {
     }
 
     public string FormattedAttachments() {
+        StringBuilder formattedText = new();
+        foreach (var att in Attachments) {
+            _ = formattedText.Append($"[{att.Name}]<br>");
+        }
+
+        return formattedText.ToString();
+    }
+
+    public string FormattedAttachedAttachments() {
         StringBuilder formattedText = new();
         foreach (var att in Attachments) {
             _ = formattedText.Append($"<attachment id='{att.TeamsGUID}'></attachment>");

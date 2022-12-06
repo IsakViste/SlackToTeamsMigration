@@ -140,8 +140,9 @@ public class GraphHelper {
     #endregion
 
     #region Channel Handling
+    public static readonly string CHANNEL_CREATION_DATE = "2019-09-17T11:22:17.067Z";
     public async Task<string> CreateChannelAsync(string teamID, string dirName) {
-        STChannel channel = new(dirName, "2020-04-14T11:22:17.047Z");
+        STChannel channel = new(dirName, CHANNEL_CREATION_DATE);
         string json = JsonConvert.SerializeObject(channel);
 
         // Set creation mode to migration!
@@ -178,9 +179,10 @@ public class GraphHelper {
     #endregion
 
     #region Getters
-    public async Task<IGraphServiceUsersCollectionPage> GetTeamUsers() {
+    public async Task<IGraphServiceUsersCollectionPage> GetTeamUser(string userEmail) {
         return await GraphClient.Users
         .Request()
+        .Filter($"mail eq '{userEmail}'")
         .Select(u => new {
             u.Id,
             u.Mail
@@ -250,7 +252,7 @@ public class GraphHelper {
         // Message that doesn't have team user equivalent
         return new ChatMessage {
             Body = new ItemBody {
-                Content = message.FormattedMessage(),
+                Content = message.FormattedMessage(false),
                 ContentType = BodyType.Html,
             },
             From = messageFrom,
@@ -327,7 +329,7 @@ public class GraphHelper {
             }
 
             attachment.TeamsURL = uploadResult.ItemResponse.WebUrl;
-            attachment.TeamsGUID = s_regexGUID.Match(uploadResult.ItemResponse.ETag).Groups[1].ToString();
+            // attachment.TeamsGUID = s_regexGUID.Match(uploadResult.ItemResponse.ETag).Groups[1].ToString();
             attachment.Name = uploadResult.ItemResponse.Name;
         } catch (ServiceException ex) {
             Console.WriteLine($"Error uploading: {ex}");
@@ -358,7 +360,7 @@ public class GraphHelper {
             Locale = "en-us",
             From = messageFrom,
             Body = new ItemBody {
-                Content = message.FormattedMessage(),
+                Content = message.FormattedMessage(true),
                 ContentType = BodyType.Html,
             },
             Attachments = attachments,

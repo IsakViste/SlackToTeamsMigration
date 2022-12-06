@@ -47,13 +47,15 @@ public class UsersHelper {
     }
 
     public static async Task PopulateTeamsUsers(GraphHelper graphHelper, List<STUser> userList) {
-        var teamUsers = await graphHelper.GetTeamUsers();
-
         foreach (STUser user in userList) {
-            var id = (from teamUser in teamUsers where teamUser.Mail == user.Email select teamUser.Id).FirstOrDefault();
-            if (!string.IsNullOrEmpty(id)) {
-                user.SetTeamUserID(id);
+            if (string.IsNullOrEmpty(user.Email)) {
+                continue;
             }
+
+            var teamUsers = await graphHelper.GetTeamUser(user.Email);
+            string? teamID = teamUsers?.FirstOrDefault()?.Id;
+
+            user.SetTeamUserID(teamID);
         }
     }
 

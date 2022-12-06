@@ -9,11 +9,10 @@
 *.userosscache
 *.sln.docstates
 appsettings.json
-appsettings.*.json
-# Slack export zip extracted
+appsettings*.json
 SlackExport*
 *.mID.json
-userList.json
+userList*.json
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

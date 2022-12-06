@@ -1,5 +1,5 @@
 ﻿using System.Text;
-
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -14,7 +14,7 @@ public class MessageHandling {
         }
     }
 
-    public static IEnumerable<STMessage> GetMessagesForDay(string path, List<STUser> users, bool getAttachments) {
+    public static IEnumerable<STMessage> GetMessagesForDay(string path, List<STUser> users) {
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine($"File {path}");
         Console.ResetColor();
@@ -42,10 +42,7 @@ public class MessageHandling {
 
                 string? threadTS = obj.SelectToken("thread_ts")?.ToString();
 
-                List<STAttachment> attachments = new();
-                if (getAttachments) {
-                    attachments = GetFormattedAttachments(obj);
-                }
+                List<STAttachment> attachments = GetFormattedAttachments(obj);
 
                 STMessage message = new(messageSender, messageTS, threadTS, messageText, attachments);
 
@@ -55,22 +52,29 @@ public class MessageHandling {
     }
 
     static string GetFormattedText(JObject obj, List<STUser> userList) {
-        var richTextArray = obj.SelectTokens("blocks[0].elements[0].elements[*]").ToList();
+        var richTextArray = obj.SelectTokens("blocks[*].elements[*].elements[*]").ToList();
 
         // Simple text, get it directly from text field
         if (richTextArray == null || !richTextArray.Any()) {
             string? text = obj.SelectToken("text")?.ToString();
             return text ?? string.Empty;
-
         }
 
         StringBuilder formattedText = new();
-        foreach (JToken token in richTextArray) {
+        FormatText(formattedText, richTextArray, userList);
+
+        return formattedText.ToString();
+    }
+
+    static void FormatText(StringBuilder formattedText, List<JToken> tokens, List<STUser> userList) {
+        string? text;
+
+        foreach (JToken token in tokens) {
             string? type = token.SelectToken("type")?.ToString();
             //Console.Write($"[{type}] - ");
             switch (type) {
                 case "text":
-                    string? text = token.SelectToken("text")?.ToString();
+                    text = token.SelectToken("text")?.ToString();
 
                     if (string.IsNullOrEmpty(text)) {
                         break;
@@ -78,6 +82,14 @@ public class MessageHandling {
 
                     _ = formattedText.Append(text);
                     //Console.Write($"{text}\n");
+                    break;
+                case "rich_text_section":
+                    var subTokens = token.SelectTokens("elements[*]").ToList();
+
+                    _ = formattedText.Append("<br> • ");
+
+                    FormatText(formattedText, subTokens, userList);
+
                     break;
                 case "link":
                     string? link = token.SelectToken("url")?.ToString();
@@ -115,12 +127,14 @@ public class MessageHandling {
                     //Console.Write($"{userGroup}\n");
                     break;
                 case "emoji":
+                    break;
                 default:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"{type} not taken into account!");
+                    Console.ResetColor();
                     break;
             }
         }
-
-        return formattedText.ToString();
     }
 
     static STUser? FindMessageSender(JObject obj, List<STUser> userList) {

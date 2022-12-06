@@ -30,7 +30,7 @@ public class STUser {
 
     public static readonly STUser SLACK_BOT = BotUser("USLACKBOT", "Slack Bot");
 
-    public void SetTeamUserID(string id) {
-        TeamsUserID = id;
+    public void SetTeamUserID(string? id) {
+        TeamsUserID = id ?? string.Empty;
     }
 }
