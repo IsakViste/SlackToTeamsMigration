@@ -57,7 +57,7 @@ public class UsersHelper {
         }
     }
 
-    public static readonly string USER_LIST_FILE = "userList.json";
+    public static readonly string USER_LIST_FILE = "Data/userList.json";
     public static void StoreUserList(List<STUser> userList) {
         using StreamWriter file = File.CreateText(USER_LIST_FILE);
 
@@ -65,9 +65,11 @@ public class UsersHelper {
             Formatting = Formatting.Indented
         };
         serializer.Serialize(file, userList);
-        Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine();
-        Console.WriteLine($"Stored computed users to {Path.GetFullPath(USER_LIST_FILE)}");
+        Console.ForegroundColor = ConsoleColor.DarkBlue;
+        Console.WriteLine("Stored computed users to file");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine(Path.GetFullPath(USER_LIST_FILE));
         Console.ResetColor();
     }
 

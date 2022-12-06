@@ -37,7 +37,7 @@ class Program {
         /*
         ** INITIALIZATION
         */
-        AuthenticationConfig config = AuthenticationConfig.ReadFromJsonFile("appsettings.json");
+        AuthenticationConfig config = AuthenticationConfig.ReadFromJsonFile("Data/appsettings.json");
         GraphHelper graphHelper = new(config);
 
         /*
@@ -64,10 +64,7 @@ class Program {
         }
 
         List<STUser> userList = await ScanAndHandleUsers(graphHelper, slackArchiveBasePath, loadCurrentUserList);
-        Console.ForegroundColor = ConsoleColor.DarkBlue;
-        Console.WriteLine("The User List has been successfully populated!");
         Console.WriteLine();
-        Console.ResetColor();
 
         /*
         ** MIGRATE TEAM
@@ -184,7 +181,7 @@ class Program {
         // Ask user if he wants to reload it so he can make changes to it
         // after it has been computed and stored
         Console.ForegroundColor = ConsoleColor.Blue;
-        Console.WriteLine("You now have the possibility to make changes to this User List if you want");
+        Console.WriteLine("You now have the possibility to make changes to this file if you want");
         Console.ForegroundColor = ConsoleColor.Gray;
         Console.Write("Press any key to continue ");
         Console.ResetColor();
@@ -199,11 +196,14 @@ class Program {
 
         if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
             Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("Reloading User List!");
+            Console.WriteLine("The User List has been reloaded!");
             Console.ResetColor();
             return UsersHelper.LoadUserList();
         }
 
+        Console.ForegroundColor = ConsoleColor.Blue;
+        Console.WriteLine("The User List has been kept as is!");
+        Console.ResetColor();
         return userList;
     }
     #endregion
@@ -285,8 +285,8 @@ class Program {
         bool isValidPath = false;
 
         if (!string.IsNullOrEmpty(arg)) {
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine($"Retrieving Slack Export folder: {arg}");
+            Console.ForegroundColor = ConsoleColor.DarkBlue;
+            Console.WriteLine("Retrieving Slack Export folder...");
             Console.ResetColor();
 
             slackArchiveBasePath = Path.GetFullPath(Path.Combine(directory, @arg));
@@ -314,8 +314,10 @@ class Program {
             }
         }
 
+        Console.ForegroundColor = ConsoleColor.DarkBlue;
+        Console.WriteLine("Successfully retrieved Slack Export folder");
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"Successfully retrieved: {slackArchiveBasePath}");
+        Console.WriteLine(slackArchiveBasePath);
         Console.WriteLine();
         Console.ResetColor();
 
@@ -333,8 +335,10 @@ class Program {
             Environment.Exit(1);
         }
 
+        Console.ForegroundColor = ConsoleColor.DarkBlue;
+        Console.WriteLine("Successfully retrieved Slack Users file");
         Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"Successfully retrieved: {slackUsersPath}");
+        Console.WriteLine(slackUsersPath);
         Console.ResetColor();
 
         return slackUsersPath;
