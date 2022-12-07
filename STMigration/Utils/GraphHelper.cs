@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Azure.Identity;
 using Microsoft.Graph;
 using Microsoft.Identity.Client;
 using Newtonsoft.Json;
@@ -10,6 +11,9 @@ using STMigration.Models;
 namespace STMigration.Utils;
 
 public class GraphHelper {
+    /*
+    ** APP AUTHENTICATION
+    */
     AuthenticationConfig Config { get; set; }
     IConfidentialClientApplication App { get; set; }
 
@@ -18,6 +22,11 @@ public class GraphHelper {
     // and then granted by a tenant administrator. 
     string[] Scopes { get; set; }
 
+    /*
+    ** CLIENT DELEGATION
+    */
+    private DeviceCodeCredential? DeviceCodeCredential { get; set; }
+
     public GraphHelper(AuthenticationConfig config) {
         Config = config;
         App = ConfidentialClientApplicationBuilder.Create(config.ClientId)
@@ -25,6 +34,15 @@ public class GraphHelper {
                     .WithAuthority(new Uri(config.Authority))
                     .Build();
         Scopes = new string[] { $"{config.ApiUrl}.default" }; // Generates a scope -> "https://graph.microsoft.com/.default"
+
+        DeviceCodeCredential = new DeviceCodeCredential((info, cancel) => {
+            // Display the device code message to
+            // the user. This tells them
+            // where to go to sign in and provides the
+            // code to use.
+            Console.WriteLine(info.Message);
+            return Task.FromResult(0);
+        }, Config.Tenant, Config.ClientId);
     }
 
     /// <summary>
@@ -39,6 +57,11 @@ public class GraphHelper {
         requestMessage.Headers.Authorization =
             new AuthenticationHeaderValue("Bearer", result.AccessToken);
     }));
+
+    private static readonly string[] s_scopes = new string[] {
+        "User.Read", "Group.ReadWrite.All"
+    };
+    private GraphServiceClient UserGraphClient => new(DeviceCodeCredential, s_scopes);
 
     #region API Handling
     public async Task<JsonNode?> GetFromMSGraph(string apiCall) {
@@ -256,17 +279,16 @@ public class GraphHelper {
             .AddAsync(msg);
     }
 
-    private static ChatMessage MessageToSend(STMessage message, List<ChatMessageAttachment>? attachments = null) {
+    private static ChatMessage MessageToSend(STMessage message) {
         ChatMessageFromIdentitySet messageFrom = MessageFrom(message);
 
         // Message that doesn't have team user equivalent
         return new ChatMessage {
             Body = new ItemBody {
-                Content = message.FormattedMessage(false),
+                Content = message.FormattedMessage(),
                 ContentType = BodyType.Html,
             },
             From = messageFrom,
-            Attachments = attachments,
             CreatedDateTime = message.FormattedLocalTime()
         };
     }
@@ -339,7 +361,7 @@ public class GraphHelper {
             }
 
             attachment.TeamsURL = uploadResult.ItemResponse.WebUrl;
-            // attachment.TeamsGUID = s_regexGUID.Match(uploadResult.ItemResponse.ETag).Groups[1].ToString();
+            attachment.TeamsGUID = s_regexGUID.Match(uploadResult.ItemResponse.ETag).Groups[1].ToString();
             attachment.Name = uploadResult.ItemResponse.Name;
         } catch (ServiceException ex) {
             Console.WriteLine($"Error uploading: {ex}");
@@ -358,30 +380,16 @@ public class GraphHelper {
             });
         }
 
-        var messageFrom = MessageFrom(message);
-        messageFrom.Application = null;
-        messageFrom.Device = null;
-
         var msg = new ChatMessage {
-            MessageType = ChatMessageType.Message,
-            Subject = null,
-            Summary = null,
-            Importance = ChatMessageImportance.Normal,
-            Locale = "en-us",
-            From = messageFrom,
             Body = new ItemBody {
-                Content = message.FormattedMessage(true),
+                Content = message.AttachmentsMessage(),
                 ContentType = BodyType.Html,
             },
             Attachments = attachments,
-            Mentions = new List<ChatMessageMention>() {
-            },
-            Reactions = new List<ChatMessageReaction>() {
-            },
         };
 
-        _ = await GraphClient.Teams[teamID].Channels[channelID].Messages[message.TeamID]
-            .Request().UpdateAsync(msg);
+        _ = await UserGraphClient.Teams[teamID].Channels[channelID].Messages[message.TeamID].Replies
+            .Request().AddAsync(msg);
     }
     #endregion
 }

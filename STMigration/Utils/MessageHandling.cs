@@ -126,9 +126,24 @@ public class MessageHandling {
                     _ = formattedText.Append($"@TEAM");
                     //Console.Write($"{userGroup}\n");
                     break;
+                case "color":
+                    string? value = token.SelectToken("value")?.ToString();
+
+                    if (string.IsNullOrEmpty(value)) {
+                        break;
+                    }
+
+                    _ = formattedText.Append($"[{value}]");
+                    break;
                 case "emoji":
-                    // TODO: Figure out channel display name
-                    _ = formattedText.Append("EMOJI");
+                    // TODO: Figure out better solution for emojis
+                    string? name = token.SelectToken("name")?.ToString();
+
+                    if (string.IsNullOrEmpty(name)) {
+                        break;
+                    }
+
+                    _ = formattedText.Append($":{name}:");
                     break;
                 case "channel":
                     // TODO: Figure out channel display name
@@ -182,17 +197,17 @@ public class MessageHandling {
         foreach (var attachment in attachmentsArray) {
             string? url = attachment.SelectToken("url_private_download")?.ToString();
             string? fileType = attachment.SelectToken("filetype")?.ToString();
-            string? title = attachment.SelectToken("title")?.ToString();
+            string? name = attachment.SelectToken("name")?.ToString();
             string? date = attachment.SelectToken("timestamp")?.ToString();
 
             if (string.IsNullOrEmpty(url)) {
                 continue;
             }
-            if (string.IsNullOrEmpty(fileType) && string.IsNullOrEmpty(title)) {
+            if (string.IsNullOrEmpty(fileType) && string.IsNullOrEmpty(name)) {
                 continue;
             }
 
-            formattedAttachments.Add(new STAttachment(url, fileType, title, date));
+            formattedAttachments.Add(new STAttachment(url, fileType, name, date));
             index++;
         }
 

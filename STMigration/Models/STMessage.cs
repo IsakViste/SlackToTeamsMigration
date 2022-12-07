@@ -14,7 +14,7 @@ public class STMessage {
     public List<STAttachment> Attachments { get; set; }
 
     // Team Message IDs are the Timestamps first 13 digits
-    public string? TeamID => $"{ThreadDate?.Replace(".", "")[..13]}";
+    public string? TeamID => ThreadDate?.Replace(".", "")[..13] ?? Date.Replace(".", "")[..13];
 
     public STMessage(STUser? user, string date, string? threadDate, string text, List<STAttachment> attachments) {
         User = user;
@@ -28,19 +28,23 @@ public class STMessage {
         Attachments = attachments;
     }
 
-    public string FormattedMessage(bool attachedFiles) {
-        string attachments = attachedFiles ? FormattedAttachedAttachments() : FormattedAttachments();
+    public string AttachmentsMessage() {
+        return $"<strong>[{FormattedLocalTime()}] {User?.DisplayName ?? "UNKNOWN"}</strong><br>{FormattedAttachedAttachments()}";
+    }
+
+    public string FormattedMessage() {
+        string attachments = FormattedAttachments();
         string formattedText = FormattedText();
 
         if (string.IsNullOrEmpty(formattedText)) {
             if (string.IsNullOrEmpty(attachments)) {
-                return "EMPTY TEXT<br>Possibly a reference to a message/thread";
+                return $"EMPTY TEXT<br>Possibly a reference to a message/thread";
             }
             return attachments;
         }
 
         if (string.IsNullOrEmpty(attachments)) {
-            return $"{formattedText}";
+            return formattedText;
         }
 
         return $"{formattedText}<blockquote>{attachments}</blockquote>";
