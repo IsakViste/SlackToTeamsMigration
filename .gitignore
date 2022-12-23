@@ -13,6 +13,7 @@ appsettings*.json
 SlackExport*
 *.mID.json
 userList*.json
+.env*
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

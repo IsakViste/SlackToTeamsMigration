@@ -1,4 +1,7 @@
-﻿namespace STMigration.Models;
+﻿// Copyright (c) Isak Viste. All rights reserved.
+// Licensed under the MIT License.
+
+namespace STMigration.Models;
 
 public class STAttachment {
     public string SlackURL { get; set; }
@@ -46,7 +49,7 @@ public class STAttachment {
         }
 
         DateTime dateTime = DateTimeOffset.FromUnixTimeSeconds(long.Parse(Date)).LocalDateTime;
-        Date = $"{dateTime.Year}/{dateTime.Month}/{dateTime.Day}-{dateTime.DayOfWeek}";
+        Date = $"{dateTime.Year}/{dateTime.Month:D2}/{dateTime.Day:D2}-{dateTime.DayOfWeek}";
 
         string timeString = $"{dateTime.Hour:D2}.{dateTime.Minute:D2}.{dateTime.Second:D2}";
         FormattedName(timeString);

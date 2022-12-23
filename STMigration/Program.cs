@@ -1,5 +1,5 @@
-﻿// Copyright (c) Isak Viste. All rights reserved.
-// Licensed under the MIT license.
+// Copyright (c) Isak Viste. All rights reserved.
+// Licensed under the MIT License.
 
 using STMigration.Models;
 using STMigration.Utils;
@@ -198,7 +198,7 @@ class Program {
                         await UploadFileToPath(graphHelper, teamID, channelName, attachment);
                     }
 
-                    await AddAttachmentsToMessage(graphHelper, teamID, channelID, message);
+                    //await AddAttachmentsToMessage(graphHelper, teamID, channelID, message);
                 }
             }
         }

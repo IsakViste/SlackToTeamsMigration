@@ -1,4 +1,7 @@
-﻿using System.Text;
+// Copyright (c) Isak Viste. All rights reserved.
+// Licensed under the MIT License.
+
+using System.Text;
 
 namespace STMigration.Models;
 

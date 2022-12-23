@@ -1,3 +1,6 @@
+// Copyright (c) Isak Viste. All rights reserved.
+// Licensed under the MIT License.
+
 namespace STMigration.Models;
 
 #pragma warning disable IDE1006

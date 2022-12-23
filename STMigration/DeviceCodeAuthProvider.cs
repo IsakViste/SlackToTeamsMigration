@@ -1,5 +1,5 @@
 // Copyright (c) Isak Viste. All rights reserved.
-// Licensed under the MIT license.
+// Licensed under the MIT License.
 
 using System.Net.Http.Headers;
 using Microsoft.Graph;

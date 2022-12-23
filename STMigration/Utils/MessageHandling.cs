@@ -1,5 +1,7 @@
-﻿using System.Text;
-using System.Text.RegularExpressions;
+﻿// Copyright (c) Isak Viste. All rights reserved.
+// Licensed under the MIT License.
+
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 

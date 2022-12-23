@@ -1,29 +1,33 @@
 # SlackToTeamsMigration
 
-## How to run the completed project
-
-### Prerequisites
+## Prerequisites
 
 To run the completed project in this folder, you need the following:
 
 - The [.NET SDK](https://dotnet.microsoft.com/download) installed on your development machine. (**Note:** This tutorial was written with .NET SDK version 6.0.102. The steps in this guide may work with other versions, but that has not been tested.)
+
 - A Microsoft work or school account.
 
 If you don't have a Microsoft account, you can [sign up for the Microsoft 365 Developer Program](https://developer.microsoft.com/microsoft-365/dev-program) to get a free Microsoft 365 subscription.
 
-### Register an application
-
-You can register an application using the Azure Active Directory admin center, or by using the [Microsoft Graph PowerShell SDK](https://docs.microsoft.com/graph/powershell/get-started).
-
-**NOTE:** If you downloaded this code from [https://developer.microsoft.com/graph/quick-start](https://developer.microsoft.com/graph/quick-start), an app registration has already been created for you. However, if you want to use the app-only portion of this sample, you will need to modify the app registration as specified in [Configure app-only auth (AAD admin center)](#configure-app-only-auth-aad-admin-center) or [Configure app-only auth (PowerShell)](#configure-app-only-auth-powershell).
-
-#### Azure Active Directory admin center
+## Register an application
 
 1. Open a browser and navigate to the [Azure Active Directory admin center](https://aad.portal.azure.com) and login using a **personal account** (aka: Microsoft Account) or **Work or School Account**.
 
-1. Select **Azure Active Directory** in the left-hand navigation, then select **App registrations** under **Manage**.
+1. <details>
+        <summary>Select <strong>Azure Active Directory</strong> in the left-hand navigation, then select <strong>App registrations</strong> under <strong>Manage</strong>.</summary>
+        <img src="./imgs/01-AzureActiveDirectory.png" />
+    </details>
 
-1. Select **New registration**. Enter a name for your application, for example, `.NET Graph Tutorial`.
+
+1. Register a new application to the **Azure Active Directory**
+
+    1. <details>
+        <summary>Select <strong>New registration</strong>.</summary>
+        <img src="./imgs/02-NewAppRegistration.png" />
+        </details>
+    
+    1. Enter a name for your application, for example, `STMigration`.
 
 1. Set **Supported account types** as desired. The options are:
 
@@ -35,44 +39,95 @@ You can register an application using the Azure Active Directory admin center, o
 
 1. Leave **Redirect URI** empty.
 
-1. Select **Register**. On the application's **Overview** page, copy the value of the **Application (client) ID** and save it, you will need it in the next step. If you chose **Accounts in this organizational directory only** for **Supported account types**, also copy the **Directory (tenant) ID** and save it.
+1. Select **Register**.
 
-1. Select **Authentication** under **Manage**. Locate the **Advanced settings** section and change the **Allow public client flows** toggle to **Yes**, then choose **Save**.
+1. <details>
+    <summary>Get the <strong>Client</strong> and <strong>Tenant ID</strong> on the application's <strong>Overview</strong> page</summary>
+    <img src="./imgs/03-NewAppIDs.png" />
+    </details>
 
-##### Configure app-only auth (AAD admin center)
+    1. copy the value of the **Application (client) ID** and save it, you will need it later.
+    
+    1. Also copy the **Directory (tenant) ID** and save it.
 
-> **Note:** This section requires a work/school account with the Global administrator role. You only need to complete these steps if you plan on using the app-only portions of this sample.
+1. <details>
+    <summary>Enable <strong>public client flows</strong></summary>
+    <img src="./imgs/06-AllowPublicClientFlows.png" />
+    </details>
+
+    1. Select **Authentication** under **Manage**.
+    
+    1. Locate the **Advanced settings** section and change the **Allow public client flows** toggle to **Yes**, then choose **Save**.
+
+## Configure Application (AAD admin center)
+
+> **Note:** This section requires a work/school account with the Global administrator role.
 
 1. Select **API permissions** under **Manage**.
 
 1. Remove the default **User.Read** permission under **Configured permissions** by selecting the ellipses (**...**) in its row and selecting **Remove permission**.
 
-1. Select **Add a permission**, then **Microsoft Graph**.
+1. <details>
+    <summary>Select <strong>Add a permission</strong>, then <strong>Microsoft Graph</strong></summary>
+    <img src="./imgs/07-AddPermissionSelectAPI.png" />
+    </details>
 
-1. Select **Application permissions**.
+    1. Select **Application permissions**.
 
-1. Select **User.Read.All**, then select **Add permissions**.
+    1. <details>
+        <summary>Select <strong>Teamwork.Migrate.All</strong></summary>
+        <img src="./imgs/08-AddRequiredPermissions.png" />
+        </details><br>
 
-1. Select **Grant admin consent for...**, then select **Yes** to provide admin consent for the selected permission.
+    1. Select **TeamMember.ReadWrite.All**
+
+    1. Select **ChannelSettings.ReadWrite.All**
+    
+    1. then select **Add permissions**.
+
+    
+
+1. <details>
+    <summary>Select <strong>Grant admin consent for...</strong>, then select <strong>Yes</strong> to provide admin consent for the selected permission.</summary>
+    <img src="./imgs/09-GrantAdminConsent.png" />
+    </details><br>
 
 1. Select **Certificates and secrets** under **Manage**, then select **New client secret**.
 
-1. Enter a description, choose a duration, and select **Add**.
+    1. <details>
+        <summary>Enter a description, choose a duration, and select <strong>Add</strong>.</summary>
+        <img src="./imgs/04-NewClientSecret.png" />
+        </details><br>
 
-1. Copy the secret from the **Value** column, you will need it in the next steps.
+    1. <details>
+        <summary>Copy the secret from the <strong>Value</strong> column, you will need it soon.</summary>
+        <img src="./imgs/05-CopyClientSecret.png" />
+        </details><br>
 
+1. Go to the online [Graph Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer)
 
-### Configure the sample
+    1. Run the default command
 
-1. Open [appsettings.json](./GraphTutorial/appsettings.json) and update the values according to the following table.
+    `https://graph.microsoft.com/v1.0/me`
+
+    2. <details>
+        <summary>Copy the <strong>team user id</strong> and save it, you will need it in the next step!</summary>
+        <img src="./imgs/10-GetTeamUserID.png" />
+        </details><br>
+    
+
+## Configure the sample
+
+1. Open [appsettings.json](./STMigration/Data/appsettings.json) and update the values according to the following table.
 
     | Setting | Value |
     |---------|-------|
-    | `clientId` | The client ID of your app registration |
-    | `tenantId` | The tenant ID of your organization (only needed if doing app-only) |
-    | `authTenant` | If you chose the option to only allow users in your organization to sign in, change this value to your tenant ID. Otherwise leave as `common`. |
+    | `ClientId` | The client ID of your app registration |
+    | `Tenant` | The tenant ID of your organization |
+    | `ClientSecret` | The value of the client secret |
+    | `OwnerUserId` | The ID of your team account, will be used to add as owner to newly created team |
 
-### Build and run the sample
+## Build and run the sample
 
 In your command-line interface (CLI), navigate to the project directory and run the following commands.
 
