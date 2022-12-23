@@ -15,8 +15,8 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
 1. Open a browser and navigate to the [Azure Active Directory admin center](https://aad.portal.azure.com) and login using a **personal account** (aka: Microsoft Account) or **Work or School Account**.
 
 1. <details>
-        <summary>Select <strong>Azure Active Directory</strong> in the left-hand navigation, then select <strong>App registrations</strong> under <strong>Manage</strong>.</summary>
-        <img src="./imgs/01-AzureActiveDirectory.png" />
+    <summary>Select <strong>Azure Active Directory</strong> in the left-hand navigation, then select <strong>App registrations</strong> under <strong>Manage</strong>.</summary>
+    <img src="./imgs/01-AzureActiveDirectory.png" />
     </details>
 
 
@@ -77,7 +77,7 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
     1. <details>
         <summary>Select <strong>Teamwork.Migrate.All</strong></summary>
         <img src="./imgs/08-AddRequiredPermissions.png" />
-        </details><br>
+        </details>
 
     1. Select **TeamMember.ReadWrite.All**
 
@@ -90,19 +90,19 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
 1. <details>
     <summary>Select <strong>Grant admin consent for...</strong>, then select <strong>Yes</strong> to provide admin consent for the selected permission.</summary>
     <img src="./imgs/09-GrantAdminConsent.png" />
-    </details><br>
+    </details>
 
 1. Select **Certificates and secrets** under **Manage**, then select **New client secret**.
 
     1. <details>
         <summary>Enter a description, choose a duration, and select <strong>Add</strong>.</summary>
         <img src="./imgs/04-NewClientSecret.png" />
-        </details><br>
+        </details>
 
     1. <details>
         <summary>Copy the secret from the <strong>Value</strong> column, you will need it soon.</summary>
         <img src="./imgs/05-CopyClientSecret.png" />
-        </details><br>
+        </details>
 
 1. Go to the online [Graph Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer)
 
@@ -113,7 +113,7 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
     2. <details>
         <summary>Copy the <strong>team user id</strong> and save it, you will need it in the next step!</summary>
         <img src="./imgs/10-GetTeamUserID.png" />
-        </details><br>
+        </details>
     
 
 ## Configure the sample
