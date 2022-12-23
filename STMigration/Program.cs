@@ -98,7 +98,8 @@ class Program {
             if (!string.IsNullOrEmpty(input) && (input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true")) {
                 while (string.IsNullOrEmpty(teamID)) {
                     Console.ForegroundColor = ConsoleColor.DarkYellow;
-                    Console.Write("Which team do you want to finish migrating? ");
+                    Console.WriteLine("Which team do you want to finish migrating?");
+                    Console.Write("Input Team ID: ");
                     Console.ResetColor();
                     teamID = Console.ReadLine();
                 }

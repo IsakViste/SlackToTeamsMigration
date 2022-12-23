@@ -10,7 +10,7 @@ To run the completed project in this folder, you need the following:
 
 If you don't have a Microsoft account, you can [sign up for the Microsoft 365 Developer Program](https://developer.microsoft.com/microsoft-365/dev-program) to get a free Microsoft 365 subscription.
 
-## Register an application
+## Register the application
 
 1. Open a browser and navigate to the [Azure Active Directory admin center](https://aad.portal.azure.com) and login using a **personal account** (aka: Microsoft Account) or **Work or School Account**.
 
@@ -46,7 +46,7 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
     <img src="./imgs/03-NewAppIDs.png" />
     </details>
 
-    1. copy the value of the **Application (client) ID** and save it, you will need it later.
+    1. Copy the value of the **Application (client) ID** and save it, you will need it later.
     
     1. Also copy the **Directory (tenant) ID** and save it.
 
@@ -59,7 +59,7 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
     
     1. Locate the **Advanced settings** section and change the **Allow public client flows** toggle to **Yes**, then choose **Save**.
 
-## Configure Application (AAD admin center)
+## Configure AAD Application
 
 > **Note:** This section requires a work/school account with the Global administrator role.
 
@@ -116,9 +116,9 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
         </details>
     
 
-## Configure the sample
+## Configure App Settings
 
-1. Open [appsettings.json](./STMigration/Data/appsettings.json) and update the values according to the following table.
+Open [appsettings.json](./STMigration/Data/appsettings.json) and update the values according to the following table.
 
     | Setting | Value |
     |---------|-------|
