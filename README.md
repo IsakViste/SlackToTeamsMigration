@@ -112,7 +112,7 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
 
     1. <details>
         <summary>Run the default command: <strong>GET my profile</strong></summary>
-        `https://graph.microsoft.com/v1.0/me`
+        <pre><code>https://graph.microsoft.com/v1.0/me</code></pre>
         </details>
 
     2. <details>
