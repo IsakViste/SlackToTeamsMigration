@@ -66,7 +66,7 @@ public class AuthenticationConfig {
         IConfigurationRoot configuration;
 
         var builder = new ConfigurationBuilder()
-        .SetBasePath(System.IO.Directory.GetCurrentDirectory())
+        .SetBasePath(Directory.GetCurrentDirectory())
         .AddJsonFile(path);
 
         configuration = builder.Build();

@@ -1,16 +1,22 @@
-# SlackToTeamsMigration
+# SlackToTeamsMigration <!-- omit from toc -->
+
+- [Prerequisites](#prerequisites)
+- [Register Application](#register-application)
+- [Configure AAD Application](#configure-aad-application)
+- [Configure App Settings](#configure-app-settings)
+- [Build and Run](#build-and-run)
 
 ## Prerequisites
 
 To run the completed project in this folder, you need the following:
 
-- The [.NET SDK](https://dotnet.microsoft.com/download) installed on your development machine. (**Note:** This tutorial was written with .NET SDK version 6.0.102. The steps in this guide may work with other versions, but that has not been tested.)
+- The [.NET SDK](https://dotnet.microsoft.com/download) installed on your development machine.
 
 - A Microsoft work or school account.
 
 If you don't have a Microsoft account, you can [sign up for the Microsoft 365 Developer Program](https://developer.microsoft.com/microsoft-365/dev-program) to get a free Microsoft 365 subscription.
 
-## Register the application
+## Register Application
 
 1. Open a browser and navigate to the [Azure Active Directory admin center](https://aad.portal.azure.com) and login using a **personal account** (aka: Microsoft Account) or **Work or School Account**.
 
@@ -31,10 +37,10 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
 
 1. Set **Supported account types** as desired. The options are:
 
-    | Option | Who can sign in? |
-    |--------|------------------|
-    | **Accounts in this organizational directory only** | Only users in your Microsoft 365 organization |
-    | **Accounts in any organizational directory** | Users in any Microsoft 365 organization (work or school accounts) |
+    | Option                                                                           | Who can sign in?                                                                                  |
+    | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+    | **Accounts in this organizational directory only**                               | Only users in your Microsoft 365 organization                                                     |
+    | **Accounts in any organizational directory**                                     | Users in any Microsoft 365 organization (work or school accounts)                                 |
     | **Accounts in any organizational directory ... and personal Microsoft accounts** | Users in any Microsoft 365 organization (work or school accounts) and personal Microsoft accounts |
 
 1. Leave **Redirect URI** empty.
@@ -85,8 +91,6 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
     
     1. then select **Add permissions**.
 
-    
-
 1. <details>
     <summary>Select <strong>Grant admin consent for...</strong>, then select <strong>Yes</strong> to provide admin consent for the selected permission.</summary>
     <img src="./imgs/09-GrantAdminConsent.png" />
@@ -106,9 +110,10 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
 
 1. Go to the online [Graph Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer)
 
-    1. Run the default command
-
-    `https://graph.microsoft.com/v1.0/me`
+    1. <details>
+        <summary>Run the default command: <strong>GET my profile</strong></summary>
+        `https://graph.microsoft.com/v1.0/me`
+        </details>
 
     2. <details>
         <summary>Copy the <strong>team user id</strong> and save it, you will need it in the next step!</summary>
@@ -120,14 +125,14 @@ If you don't have a Microsoft account, you can [sign up for the Microsoft 365 De
 
 Open [appsettings.json](./STMigration/Data/appsettings.json) and update the values according to the following table.
 
-    | Setting | Value |
-    |---------|-------|
-    | `ClientId` | The client ID of your app registration |
-    | `Tenant` | The tenant ID of your organization |
-    | `ClientSecret` | The value of the client secret |
-    | `OwnerUserId` | The ID of your team account, will be used to add as owner to newly created team |
+|        Setting | Value                                  |
+| -------------: | -------------------------------------- |
+|       `Tenant` | The tenant ID of your organization     |
+|     `ClientId` | The client ID of your app registration |
+| `ClientSecret` | The value of the client secret         |
+|  `OwnerUserId` | The user ID of your team account       |
 
-## Build and run the sample
+## Build and Run
 
 In your command-line interface (CLI), navigate to the project directory and run the following commands.
 
