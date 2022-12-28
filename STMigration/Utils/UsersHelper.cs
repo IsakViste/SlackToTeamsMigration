@@ -55,10 +55,18 @@ public class UsersHelper {
                 continue;
             }
 
-            var teamUsers = await graphHelper.GetTeamUser(user.Email);
-            string? teamID = teamUsers?.FirstOrDefault()?.Id;
+            try {
+                var teamUsers = await graphHelper.GetTeamUser(user.Email);
+                string? teamID = teamUsers?.FirstOrDefault()?.Id;
 
-            user.SetTeamUserID(teamID);
+                user.SetTeamUserID(teamID);
+            } catch (Exception) {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"Error getting team user by email: {user.Email}");
+                Console.ResetColor();
+                Console.WriteLine();
+                throw;
+            }
         }
     }
 

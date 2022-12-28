@@ -207,39 +207,63 @@ class Program {
 
     #region User Handling
     static async Task<List<STUser>> ScanAndHandleUsers(GraphHelper graphHelper, string slackArchiveBasePath, bool loadUserListInstead) {
-        string? input;
+        async Task PopulateTeamUsers(List<STUser> users) {
+            try {
+                await UsersHelper.PopulateTeamsUsers(graphHelper, users);
+            } catch (Exception ex) {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error getting team users!");
+                if (ex.InnerException != null) {
+                    Console.WriteLine(ex.InnerException.Message);
+                } else {
+                    Console.WriteLine(ex.Message);
+                }
+                Console.ResetColor();
+                Environment.Exit(1);
+            }
+        }
 
-        if (loadUserListInstead) {
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine("Loading user from existing User List!");
-
+        async Task AskToPopulateTeamIDs(List<STUser> users) {
             Console.ForegroundColor = ConsoleColor.DarkYellow;
             Console.Write("Do you want to populate TeamIDs? [Y/n] ");
             Console.ResetColor();
-            input = Console.ReadLine();
+            string? input = Console.ReadLine();
 
-            List<STUser> users = UsersHelper.LoadUserList();
             if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
-                await UsersHelper.PopulateTeamsUsers(graphHelper, users);
+                // Fill in team IDs in the userList for the users based on their email
+                await PopulateTeamUsers(users);
                 Console.ForegroundColor = ConsoleColor.Blue;
                 Console.WriteLine("The Users Team IDs have been updated!");
                 Console.ResetColor();
 
                 UsersHelper.StoreUserList(users);
-                return users;
             } else {
+                // Keep the team IDs as they are and don't make any changes
                 Console.ForegroundColor = ConsoleColor.Blue;
                 Console.WriteLine("The Users Team IDS have been kept as is!");
                 Console.ResetColor();
             }
+        }
+
+        // Load userList instead of generating one from the slack archive
+        if (loadUserListInstead) {
+            Console.ForegroundColor = ConsoleColor.Blue;
+            Console.WriteLine("Loading user from existing User List!");
+            Console.ResetColor();
+
+            List<STUser> users = UsersHelper.LoadUserList();
+            await AskToPopulateTeamIDs(users);
 
             return users;
         }
 
+        // Get slack user JSON from the slack export archive
         string slackUsersPath = GetSlackUsersPath(slackArchiveBasePath);
 
+        // Scan users from the JSON and get team IDs for the respective users based on their email
+        // Then store it locally in the userList
         List<STUser> userList = UsersHelper.ScanUsersFromSlack(slackUsersPath);
-        await UsersHelper.PopulateTeamsUsers(graphHelper, userList);
+        await PopulateTeamUsers(userList);
         UsersHelper.StoreUserList(userList);
 
         // Ask user if he wants to reload it so he can make changes to it
@@ -256,31 +280,17 @@ class Program {
         Console.ForegroundColor = ConsoleColor.DarkYellow;
         Console.Write("Do you want to reload the User List from disk? [Y/n] ");
         Console.ResetColor();
-        input = Console.ReadLine();
+        string? input = Console.ReadLine();
 
         if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
+            // Reload the userList from disk (used when user has made manual changes to the userList)
             List<STUser> users = UsersHelper.LoadUserList();
             Console.ForegroundColor = ConsoleColor.Blue;
             Console.WriteLine("The User List has been reloaded!");
             Console.ResetColor();
 
-            Console.ForegroundColor = ConsoleColor.DarkYellow;
-            Console.Write("Do you want to populate TeamIDs? [Y/n] ");
-            Console.ResetColor();
-            input = Console.ReadLine();
-
-            if (string.IsNullOrEmpty(input) || input.ToLower() == "y" || input.ToLower() == "yes" || input.ToLower() == "true") {
-                await UsersHelper.PopulateTeamsUsers(graphHelper, users);
-                Console.ForegroundColor = ConsoleColor.Blue;
-                Console.WriteLine("The Users Team IDs have been updated!");
-                Console.ResetColor();
-
-                UsersHelper.StoreUserList(users);
-            } else {
-                Console.ForegroundColor = ConsoleColor.Blue;
-                Console.WriteLine("The Users Team IDS have been kept as is!");
-                Console.ResetColor();
-            }
+            // Now ask to repopulate team IDs based on emails in the userList
+            await AskToPopulateTeamIDs(users);
 
             return users;
         }
